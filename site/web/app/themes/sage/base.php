@@ -18,18 +18,22 @@ use Roots\Sage\Wrapper;
       do_action('get_header');
       get_template_part('templates/header');
     ?>
-    <div class="wrap container" role="document">
+    <div class="wrap container-fluid" role="main">
       <div class="content row">
         <main class="main">
           <?php include Wrapper\template_path(); ?>
         </main><!-- /.main -->
-        <?php if (Setup\display_sidebar()) : ?>
-          <aside class="sidebar">
-            <?php include Wrapper\sidebar_path(); ?>
-          </aside><!-- /.sidebar -->
-        <?php endif; ?>
+
       </div><!-- /.content -->
     </div><!-- /.wrap -->
+    <aside class="sidebar hidden-xs hidden-sm visible-md visible-lg" role="complementary" style=" overflow: hidden; background-color: red">
+        <div class="    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    overflow: auto;">  <?php include Wrapper\sidebar_path(); ?></div>
+
+    </aside>
     <?php
       do_action('get_footer');
       get_template_part('templates/footer');

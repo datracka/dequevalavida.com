@@ -1,9 +1,49 @@
 // Glyphicons font path
 $icon-font-path:        "../fonts/";
 
+$tablet: (768 + 1)px;
+$break-large: 1201px;
+
+
 // Grid settings
 $main-sm-columns:       12;
 $sidebar-sm-columns:    4;
 
-// Colors
-$brand-primary:         #ff8902;
+/* Palette templates */
+
+$black:          #000 !default;
+$grayDarker:     #222 !default;
+$grayDark:       #333 !default;
+$gray:           #555 !default;
+$grayLight:      #999 !default;
+$grayLighter:    #eee !default;
+$white:          #fff !default;
+
+$blue-darkest     : #215564;
+$blue-dark        : #388D9B;
+$blue             : #4AB7C3;
+$blue-light       : #86D0DA;
+$blue-lighter     : #B1E1E8;
+$blue-lightest    : #BCE5EB;
+
+
+$min-mobile-width:  480px;
+$min-mobile-portrait-width: 768px;
+$min-tablet-width: 992px;
+$min-desktop-width: 1200px;
+
+// Bourbon Neat Breakpoints fix: not used. Experimental (neat.bourbon.io)
+$mobile: new-breakpoint(min-width $min-mobile-width 4);
+$mobile-portrait: new-breakpoint(min-width $min-mobile-portrait-width 8);
+$tablet: new-breakpoint(min-width $min-tablet-width 12);
+$desktop: new-breakpoint(min-width $min-desktop-width 16);
+
+// Overrides bootstrap variables
+
+//** Unit-less `line-height` for use in components like buttons.
+$line-height-base:        1.7 !default; // 18/13
+$line-height-header:      1;
+
+
+$sidebar-width: 24em; //inherited from body
+

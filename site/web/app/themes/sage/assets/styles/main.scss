@@ -5,7 +5,14 @@
 @import "../../bower_components/bootstrap-sass/assets/stylesheets/_bootstrap.scss";
 // endbower
 
+@import "bourbon/bourbon";
+@import "neat/neat";
+
+@import "common/_fonts";
 @import "common/_global";
+@import "components/_typography";
+@import "components/_posts";
+@import "components/_navbars";
 @import "components/_buttons";
 @import "components/_comments";
 @import "components/_forms";
@@ -17,4 +24,4 @@
 @import "layouts/_pages";
 @import "layouts/_posts";
 @import "layouts/_tinymce";
-@import "layouts/_hardcoded";
+
