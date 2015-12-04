@@ -88,6 +88,7 @@ if ( x_demo_content_stage_not_completed( 'xcs-import' ) ) {
 
   x_demo_content_set_stage_completed( 'xcs-import' );
 
+  x_bust_google_fonts_cache();
 }
 
 

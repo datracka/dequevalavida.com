@@ -1,31 +1,12 @@
 <?php
 
 /**
- * Access Cornerstone without a global variable
- * @return object  main Cornerstone instance.
- */
-function CS() {
-	return Cornerstone::instance();
-}
-
-
-/**
- * Text Domain helper method
- * @return string  text domain
- */
-function csl18n() {
-	return CS()->td();
-}
-
-
-/**
  * Get all the Font Awesome unicode values
  * @return array Hash list of icon aliases and unicode values
  */
 function fa_all_unicode() {
   return CS()->common()->getFontIcons();
 }
-
 
 /**
  * Returns a unicode value for a font icon
@@ -189,7 +170,8 @@ function cs_build_shortcode( $name, $attributes, $extra = '', $content = '' ) {
   $output = "[{$name}";
 
   foreach ($attributes as $attribute => $value) {
-    $output .= " {$attribute}=\"{$value}\"";
+	$clean = cs_clean_shortcode_att( $value );
+    $output .= " {$attribute}=\"{$clean}\"";
   }
 
   if ($extra != '') {
@@ -221,4 +203,129 @@ function cs_animation_base_class( $animation_string ) {
 
   return $base_class;
 
+}
+
+function cs_att( $attribute, $content, $echo = true ) {
+	$att = '';
+	if ( $content ) {
+		$att = $attribute . '="' . esc_attr( $content ) . '" ';
+	}
+	if ( $echo )
+		echo $att;
+	return $att;
+}
+
+function cs_atts( $atts, $echo = true ) {
+	$result = '';
+	foreach ( $atts as $att => $content) {
+		$result .= cs_att( $att, $content, false ) . ' ';
+	}
+	if ( $result )
+		echo $result;
+	return $result;
+}
+
+
+function cs_deep_array_merge ( array &$defaults, array $data, $max_depth = -1 ) {
+
+	if ( $max_depth-- == 1 ) {
+		return $defaults;
+	}
+
+  foreach ( $defaults as $key => &$value ) {
+    if ( isset ( $data[$key] ) && is_array( $value ) && is_array( $data[$key] ) ) {
+      $data[$key] = cs_deep_array_merge( $value, $data[$key], $max_depth );
+      continue;
+    }
+    $data[$key] = $value;
+  }
+
+  return $data;
+}
+
+function cs_alias_shortcode( $new_tag, $existing_tag, $filter_atts = true ) {
+
+	if ( is_array( $new_tag ) ) {
+		foreach ($new_tag as $tag) {
+			cs_alias_shortcode( $tag, $existing_tag, $filter_atts );
+		}
+		return;
+	}
+
+	if ( !shortcode_exists( $existing_tag ) )
+		return;
+
+	global $shortcode_tags;
+	add_shortcode( $new_tag, $shortcode_tags[$existing_tag] );
+
+	if ( !$filter_atts || !has_filter( $tag = "shortcode_atts_$existing_tag" ) )
+		return;
+
+	global $wp_filter;
+	foreach ( $wp_filter[$tag] as $priority => $filter ) {
+		add_filter( "shortcode_atts_$new_tag", $filter['function'], $priority, $filter['accepted_args'] );
+	}
+
+}
+
+function cs_array_filter_use_keys( $array, $callback ) {
+	return array_intersect_key( $array, array_flip( array_filter( array_keys( $array ), $callback ) ) );
+}
+
+/**
+ * Call a potentially expensive function and store the results in a transient.
+ * Future calls to cs_memoize for the same function will return the cached value
+ * until the transient expires. For example:
+ *
+ * $result = cs_memoize( 'transient_key', 'my_remote_api_request', 15 * MINUTE_IN_SECONDS, $api_key, $secret );
+ *
+ * This is the equivalent of: $result = my_remote_api_request( $api_key, $secret );
+ * but it will only truly run once every 15 minutes. It will only persist
+ * successful calls, meaning it wont set the transient if the callback
+ * returns false or a WP_Error object.
+ *
+ * @param string   $key        Key used to set the transient
+ * @param callable $function   Function to call for the original result.
+ * @param int      $expiration Optional. Time until expiration in seconds. Default 0.
+ * Optionally pass any additional paramaters that you would passed into the callback.
+ * @return mixed    $value    Value from the original call to $function
+ */
+function cs_memoize( $key, $callback, $expiration = 0 ) {
+
+	$value = get_transient( $key );
+
+	if ( false === $value ) {
+
+		$args = func_get_args();
+		$value = call_user_func_array( $callback, array_slice( $args, 3 ) );
+
+		if ( false !== $value && !is_wp_error( $value ) ) {
+			set_transient( $key, $value, $expiration );
+		}
+
+	}
+
+	return $value;
+
+}
+
+/**
+ * Sanitize a value for use in a shortcode attribute
+ * @param  string $value Value to clean
+ * @return string        Value ready for use in shortcode markup
+ */
+function cs_clean_shortcode_att( $value ) {
+
+	$value = esc_attr( $value );
+
+	$whitelist = array(
+  	'&lt;br&gt;' => '<br>',
+  	'&lt;br/&gt;' => '<br/>',
+  	'&lt;br /&gt;' => '<br />',
+  );
+
+  $value = strtr( $value, $whitelist );
+	$value = str_replace( ']', '&rsqb;', str_replace('[', '&lsqb;', $value ) );
+
+	return $value;
 }

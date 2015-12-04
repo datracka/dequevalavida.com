@@ -112,7 +112,7 @@ function x_addons_page_demo_content() {
         <?php
 
         $troubleshooting_info = '<p>While our Standard and Expanded demo content can be used any time, it is recommended for use on new installations as a starting point. <a href="https://theme.co/go/join-demodashboard.php" target="_blank">Purchase another license</a>.</p>'
-                              . '<p>If you feel you have run into a problem, check out our <a href="https://community.theme.co/kb/demo-content/#troubleshooting" target="_blank">ttroubleshooting tips</a>.</p>';
+                              . '<p>If you feel you have run into a problem, check out our <a href="https://community.theme.co/kb/demo-content/#troubleshooting" target="_blank">troubleshooting tips</a>.</p>';
 
         if ( ! X_REVOLUTION_SLIDER_IS_ACTIVE ) {
           $troubleshooting_info .= '<p><strong>Please note:</strong> Since Revolution Slider is not currently active, any sliders used in our Expanded demos will not be setup. If you wish for these sliders to be setup, please ensure that you have Revolution Slider installed and activated.</p>';

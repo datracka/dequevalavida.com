@@ -50,7 +50,7 @@ function x_create_meta_box( $post, $meta_box ) {
   if ( isset( $meta_box['description'] ) && $meta_box['description'] != '' )
     echo '<p>' . $meta_box['description'] . '</p>';
     
-  wp_nonce_field( basename(__FILE__), 'x_meta_box_nonce' );
+  wp_nonce_field( basename( __FILE__ ), 'x_meta_box_nonce' );
 
   echo '<table class="form-table x-form-table">';
  
@@ -280,18 +280,15 @@ function x_create_meta_box( $post, $meta_box ) {
         break;
 
       case 'sliders' :
-        $rev_slider = new RevSlider();
-        $sliders    = $rev_slider->getArrSliders();
+        $sliders = apply_filters( 'x_sliders_meta', array() );
         echo '<td><select name="x_meta[' . $field['id'] . ']" id="' . $field['id'] . '">';
-        echo '<option>Deactivated</option>';
-        foreach ( $sliders as $slider ) {
-          echo '<option';
+        echo '<option value="Deactivated">Deactivated</option>';
+        foreach ( $sliders as $key => $value ) {
+          echo '<option value="' . $key . '"';
           if ( $meta ) {
-            if ( $meta == $slider->getAlias() ) echo ' selected="selected"';
-          } else {
-            if ( $field['std'] == $slider->getAlias() ) echo ' selected="selected"';
+            if ( $meta == $key || $meta == $value['slug'] ) echo ' selected="selected"';
           }
-          echo '>' . $slider->getAlias() . '</option>';
+          echo '>' . $value['source'] . ': ' . $value['name'] . '</option>';
         }
         echo '</select></td>';
         break;

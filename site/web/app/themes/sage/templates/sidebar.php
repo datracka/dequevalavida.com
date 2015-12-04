@@ -19,7 +19,7 @@ foreach ($recent_posts as $recent_post) :
 endforeach;
 ?>
 
-<div class="wrapper">
+<div class="wrapper nano-content">
     <h3 class="title">Recent Posts</h3>
     <?php
     foreach ($recent_posts as $recent_post) : ?>

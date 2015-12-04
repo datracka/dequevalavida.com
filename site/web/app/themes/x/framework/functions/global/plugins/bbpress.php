@@ -491,7 +491,7 @@ if ( ! function_exists( 'x_bbpress_filter_get_the_content' ) ) :
     $r['before']        = '<div class="bbp-the-content-wrapper"><label for="bbp_topic_content">' . __( 'Content', '__x__' ) . '</label>';
     $r['after']         = '</div>';
     $r['textarea_rows'] = 8;
-    $r['quicktags']     = ( x_get_option( 'x_bbpress_enable_quicktags', '' ) == '' ) ? false : true;
+    $r['quicktags']     = ( x_get_option( 'x_bbpress_enable_quicktags' ) == '' ) ? false : true;
 
     return $r;
 
@@ -509,28 +509,28 @@ add_filter( 'bbp_before_get_the_content_parse_args', 'x_bbpress_filter_get_the_c
 if ( ! function_exists( 'x_bbpress_navbar_menu' ) ) :
   function x_bbpress_navbar_menu( $items, $args ) {
 
-    if ( X_BBPRESS_IS_ACTIVE && x_get_option( 'x_bbpress_header_menu_enable', '' ) == '1' ) {
+    if ( X_BBPRESS_IS_ACTIVE && x_get_option( 'x_bbpress_header_menu_enable' ) == '1' ) {
 
       $submenu_items  = '';
-      $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_search_url() . '" class="cf"><i class="x-icon-search" data-x-icon="&#xf002;"></i> <span>' . __( 'Forums Search', '__x__' ) . '</span></a></li>';
+      $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_search_url() . '" class="cf"><i class="x-icon-search" data-x-icon="&#xf002;" aria-hidden="true"></i> <span>' . __( 'Forums Search', '__x__' ) . '</span></a></li>';
 
       if ( is_user_logged_in() ) {
-        $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_favorites_permalink( get_current_user_id() ) . '" class="cf"><i class="x-icon-star" data-x-icon="&#xf005;"></i> <span>' . __( 'Favorites', '__x__' ) . '</span></a></li>';
-        $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_subscriptions_permalink( get_current_user_id() ) . '" class="cf"><i class="x-icon-bookmark" data-x-icon="&#xf02e;"></i> <span>' . __( 'Subscriptions', '__x__' ) . '</span></a></li>';
+        $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_favorites_permalink( get_current_user_id() ) . '" class="cf"><i class="x-icon-star" data-x-icon="&#xf005;" aria-hidden="true"></i> <span>' . __( 'Favorites', '__x__' ) . '</span></a></li>';
+        $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_subscriptions_permalink( get_current_user_id() ) . '" class="cf"><i class="x-icon-bookmark" data-x-icon="&#xf02e;" aria-hidden="true"></i> <span>' . __( 'Subscriptions', '__x__' ) . '</span></a></li>';
       }
 
-      if ( ! X_BUDDYPRESS_IS_ACTIVE || X_BUDDYPRESS_IS_ACTIVE && x_get_option( 'x_buddypress_header_menu_enable', '' ) == '' ) {
+      if ( ! X_BUDDYPRESS_IS_ACTIVE || X_BUDDYPRESS_IS_ACTIVE && x_get_option( 'x_buddypress_header_menu_enable' ) == '' ) {
         if ( ! is_user_logged_in() ) {
-          $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . wp_login_url() . '" class="cf"><i class="x-icon-sign-in" data-x-icon="&#xf090;"></i> <span>' . __( 'Log in', '__x__' ) . '</span></a></li>';
+          $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . wp_login_url() . '" class="cf"><i class="x-icon-sign-in" data-x-icon="&#xf090;" aria-hidden="true"></i> <span>' . __( 'Log in', '__x__' ) . '</span></a></li>';
         } else {
-          $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_user_profile_url( get_current_user_id() ) . '" class="cf"><i class="x-icon-cog" data-x-icon="&#xf013;"></i> <span>' . __( 'Profile', '__x__' ) . '</span></a></li>';
+          $submenu_items .= '<li class="menu-item menu-item-bbpress-navigation"><a href="' . bbp_get_user_profile_url( get_current_user_id() ) . '" class="cf"><i class="x-icon-cog" data-x-icon="&#xf013;" aria-hidden="true"></i> <span>' . __( 'Profile', '__x__' ) . '</span></a></li>';
         }
       }
 
       if ( $args->theme_location == 'primary' ) {
         $items .= '<li class="menu-item current-menu-parent menu-item-has-children x-menu-item x-menu-item-bbpress">'
                   . '<a href="' . get_post_type_archive_link( bbp_get_forum_post_type() ) . '" class="x-btn-navbar-bbpress">'
-                    . '<span><i class="x-icon-comment" data-x-icon="&#xf075;"></i><span class="x-hidden-desktop"> ' . __( 'Forums', '__x__' ) . '</span></span>'
+                    . '<span><i class="x-icon-comment" data-x-icon="&#xf075;" aria-hidden="true"></i><span class="x-hidden-desktop"> ' . __( 'Forums', '__x__' ) . '</span></span>'
                   . '</a>'
                   . '<ul class="sub-menu">'
                     . $submenu_items

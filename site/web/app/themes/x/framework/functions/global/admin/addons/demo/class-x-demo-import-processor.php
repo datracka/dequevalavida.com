@@ -584,6 +584,8 @@ class X_Demo_Import_Processor {
 
     $this->message = __( 'Setting Customizer values...', '__x__' );
 
+    x_bust_google_fonts_cache();
+
     return true;
   }
 

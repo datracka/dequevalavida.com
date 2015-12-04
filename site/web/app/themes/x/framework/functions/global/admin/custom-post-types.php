@@ -18,7 +18,7 @@
 
 function x_portfolio_init() {
 
-  $slug      = sanitize_title( x_get_option( 'x_custom_portfolio_slug', 'portfolio-item' ) );
+  $slug      = sanitize_title( x_get_option( 'x_custom_portfolio_slug' ) );
   $menu_icon = ( floatval( get_bloginfo( 'version' ) ) >= '3.8' ) ? 'dashicons-format-gallery' : NULL;
 
 

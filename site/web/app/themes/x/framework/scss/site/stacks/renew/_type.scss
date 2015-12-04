@@ -62,25 +62,7 @@ h6,
 .h5,
 .h6 {
   margin: 1.25em 0 0.2em;
-  font-family: $headingsFontFamily;
-  font-weight: $headingsFontWeight;
-  letter-spacing: -1px;
-  text-rendering: optimizelegibility;  
-  color: $headingsColor;
-
-  small {
-    font-weight: normal;
-    line-height: 1;
-    color: $grayLight;
-  }
-
-  a {
-    color: $headingsColor;
-
-    &:hover {
-      color: $accentColor;
-    }
-  }
+  text-rendering: optimizelegibility;
 }
 
 h1,

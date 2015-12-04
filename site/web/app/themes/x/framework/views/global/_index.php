@@ -9,12 +9,12 @@
 $stack = x_get_stack();
 
 if ( is_home() ) :
-  $style     = x_get_option( 'x_blog_style', 'standard' );
-  $cols      = x_get_option( 'x_blog_masonry_columns', '2' );
+  $style     = x_get_option( 'x_blog_style' );
+  $cols      = x_get_option( 'x_blog_masonry_columns' );
   $condition = is_home() && $style == 'masonry';
 elseif ( is_archive() ) :
-  $style     = x_get_option( 'x_archive_style', 'standard' );
-  $cols      = x_get_option( 'x_archive_masonry_columns', '2' );
+  $style     = x_get_option( 'x_archive_style' );
+  $cols      = x_get_option( 'x_archive_masonry_columns' );
   $condition = is_archive() && $style == 'masonry';
 elseif ( is_search() ) :
   $condition = false;

@@ -77,6 +77,7 @@ require_once( $addn_path . '/demo/class-x-demo-import-registry.php' );
 require_once( $addn_path . '/demo/class-x-demo-import-processor.php' );
 
 
+
 // Setup Menu
 // =============================================================================
 
@@ -120,6 +121,8 @@ function x_addons_add_plugins_extensions_link( $views ) {
 }
 
 add_filter( 'views_plugin-install', 'x_addons_add_plugins_extensions_link' );
+
+
 
 // Setup Demo Importer
 // =============================================================================

@@ -36,7 +36,7 @@ if ( ! empty( $tabs ) ) :
 
   ?>
 
-  <?php if ( x_get_option( 'x_woocommerce_product_tabs_enable', '1' ) == '1' ) : ?>
+  <?php if ( x_get_option( 'x_woocommerce_product_tabs_enable' ) == '1' ) : ?>
 
     <div class="woocommerce-tabs">
       <ul class="tabs x-nav x-nav-tabs <?php echo $tab_num_class; ?> top">

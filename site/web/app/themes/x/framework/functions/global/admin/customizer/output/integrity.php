@@ -22,10 +22,10 @@
 //   11. Adminbar Styling
 // =============================================================================
 
-$x_integrity_design                     = x_get_option( 'x_integrity_design', 'light' );
-$x_integrity_topbar_transparency_enable = x_get_option( 'x_integrity_topbar_transparency_enable', '' );
-$x_integrity_navbar_transparency_enable = x_get_option( 'x_integrity_navbar_transparency_enable', '' );
-$x_integrity_footer_transparency_enable = x_get_option( 'x_integrity_footer_transparency_enable', '' );
+$x_integrity_design                     = x_get_option( 'x_integrity_design' );
+$x_integrity_topbar_transparency_enable = x_get_option( 'x_integrity_topbar_transparency_enable' );
+$x_integrity_navbar_transparency_enable = x_get_option( 'x_integrity_navbar_transparency_enable' );
+$x_integrity_footer_transparency_enable = x_get_option( 'x_integrity_footer_transparency_enable' );
 
 ?>
 
@@ -327,9 +327,7 @@ a.x-img-thumbnail:hover,
 .comment-form-comment label,
 .widget_calendar #wp-calendar caption,
 .widget.widget_rss li .rsswidget {
-<?php if ( $x_custom_fonts == '1' ) : ?>
-  font-family: <?php echo $x_headings_font_family; ?>;
-<?php endif; ?>
+font-family: <?php echo $x_headings_font_family; ?>;
 font-weight: <?php echo $x_headings_font_weight; ?>;
 <?php if ( x_is_font_italic( $x_headings_font_weight_and_style ) ) : ?>
   font-style: italic;
@@ -339,18 +337,14 @@ font-weight: <?php echo $x_headings_font_weight; ?>;
 <?php endif; ?>
 }
 
-<?php if ( $x_custom_fonts == '1' ) : ?>
-
-  .p-landmark-sub,
-  .p-meta,
-  input,
-  button,
-  select,
-  textarea {
-    font-family: <?php echo $x_body_font_family; ?>;
-  }
-
-<?php endif; ?>
+.p-landmark-sub,
+.p-meta,
+input,
+button,
+select,
+textarea {
+  font-family: <?php echo $x_body_font_family; ?>;
+}
 
 
 
@@ -358,89 +352,67 @@ font-weight: <?php echo $x_headings_font_weight; ?>;
 // ========================================================================== */
 
 /*
-// Brand.
-*/
-
-<?php if ( $x_logo_font_color_enable == '1' ) : ?>
-
-  .x-brand,
-  .x-brand:hover {
-    color: <?php echo $x_logo_font_color; ?>;
-  }
-
-<?php endif; ?>
-
-
-/*
 // Body.
 */
 
-<?php if ( $x_body_font_color_enable == '1' ) : ?>
+.widget ul li a,
+.widget ol li a,
+.x-comment-time {
+  color: <?php echo $x_body_font_color; ?>;
+}
 
-  .widget ul li a,
-  .widget ol li a,
-  .x-comment-time {
+<?php if ( X_WOOCOMMERCE_IS_ACTIVE ) : ?>
+
+  .woocommerce .price > .from,
+  .woocommerce .price > del,
+  .woocommerce p.stars span a:after,
+  .woocommerce-page .price > .from,
+  .woocommerce-page .price > del,
+  .woocommerce-page p.stars span a:after {
     color: <?php echo $x_body_font_color; ?>;
   }
 
-  <?php if ( X_WOOCOMMERCE_IS_ACTIVE ) : ?>
-
-    .woocommerce .price > .from,
-    .woocommerce .price > del,
-    .woocommerce p.stars span a:after,
-    .woocommerce-page .price > .from,
-    .woocommerce-page .price > del,
-    .woocommerce-page p.stars span a:after {
-      color: <?php echo $x_body_font_color; ?>;
-    }
-
-  <?php endif; ?>
-
-  .widget_text ol li a,
-  .widget_text ul li a {
-    color: <?php echo $x_site_link_color; ?>;
-  }
-
-  .widget_text ol li a:hover,
-  .widget_text ul li a:hover {
-    color: <?php echo $x_site_link_color_hover; ?>;
-  }
-
 <?php endif; ?>
+
+.widget_text ol li a,
+.widget_text ul li a {
+  color: <?php echo $x_site_link_color; ?>;
+}
+
+.widget_text ol li a:hover,
+.widget_text ul li a:hover {
+  color: <?php echo $x_site_link_color_hover; ?>;
+}
 
 
 /*
 // Headings.
 */
 
-<?php if ( $x_headings_font_color_enable == '1' ) : ?>
+.comment-form-author label,
+.comment-form-email label,
+.comment-form-url label,
+.comment-form-rating label,
+.comment-form-comment label,
+.widget_calendar #wp-calendar th,
+.p-landmark-sub strong,
+.widget_tag_cloud .tagcloud a:hover,
+.widget_tag_cloud .tagcloud a:active,
+.entry-footer a:hover,
+.entry-footer a:active,
+.x-breadcrumbs .current,
+.x-comment-author,
+.x-comment-author a {
+  color: <?php echo $x_headings_font_color; ?>;
+}
 
-  .comment-form-author label,
-  .comment-form-email label,
-  .comment-form-url label,
-  .comment-form-rating label,
-  .comment-form-comment label,
-  .widget_calendar #wp-calendar th,
-  .p-landmark-sub strong,
-  .widget_tag_cloud .tagcloud a:hover,
-  .widget_tag_cloud .tagcloud a:active,
-  .entry-footer a:hover,
-  .entry-footer a:active,
-  .x-breadcrumbs .current,
-  .x-comment-author,
-  .x-comment-author a {
-    color: <?php echo $x_headings_font_color; ?>;
-  }
+.widget_calendar #wp-calendar th {
+  border-color: <?php echo $x_headings_font_color; ?>;
+}
 
-  .widget_calendar #wp-calendar th {
-    border-color: <?php echo $x_headings_font_color; ?>;
-  }
-
-  .h-feature-headline span i {
-    background-color: <?php echo $x_headings_font_color; ?>;
-  }
-
-<?php endif; ?>
+.h-feature-headline span i {
+  background-color: <?php echo $x_headings_font_color; ?>;
+}
 
 
 
@@ -457,28 +429,6 @@ font-weight: <?php echo $x_headings_font_weight; ?>;
 
   <?php endif; ?>
 
-  <?php if ( $x_navbar_positioning == 'fixed-top' && $x_layout_site == 'boxed' ) : ?>
-
-    .x-navbar.x-navbar-fixed-top.x-container.max.width {
-      left: 0;
-      right: 0;
-      width: 100%;
-    }
-
-  <?php endif; ?>
-
-  <?php if ( $x_navbar_positioning == 'fixed-left' || $x_navbar_positioning == 'fixed-right' ) : ?>
-
-    .x-navbar .x-navbar-inner > .x-container.width {
-      width: <?php echo $x_layout_site_width . '%'; ?>;
-    }
-
-  <?php endif; ?>
-
-  .x-widgetbar {
-    left: 0;
-    right: 0;
-  }
 }
 
 

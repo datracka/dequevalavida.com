@@ -26,12 +26,8 @@ use Roots\Sage\Wrapper;
 
       </div><!-- /.content -->
     </div><!-- /.wrap -->
-    <aside class="sidebar hidden-xs hidden-sm visible-md visible-lg" role="complementary" style=" overflow: hidden; background-color: red">
-        <div class="    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    overflow: auto;">  <?php include Wrapper\sidebar_path(); ?></div>
+    <aside class="sidebar hidden-xs hidden-sm visible-md visible-lg nano" role="complementary">
+         <?php include Wrapper\sidebar_path(); ?>
 
     </aside>
     <?php

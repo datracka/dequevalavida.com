@@ -116,7 +116,7 @@ function x_add_page_meta_boxes() {
   // Sliders.
   //
 
-  if ( X_REVOLUTION_SLIDER_IS_ACTIVE ) :
+  if ( X_REVOLUTION_SLIDER_IS_ACTIVE || X_LAYERSLIDER_IS_ACTIVE ) :
 
     $meta_box = array(
       'id'          => 'x-meta-box-slider-above',

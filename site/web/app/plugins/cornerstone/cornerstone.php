@@ -1,24 +1,22 @@
 <?php
-
 /*
-
 Plugin Name: Cornerstone
 Plugin URI: http://theme.co/cornerstone
 Description: The WordPress Page Builder
 Author: Themeco
 Author URI: http://theme.co/
-Version: 1.0.6
+Version: 1.0.9
 X Plugin: cornerstone
 Text Domain: cornerstone
 Domain Path: lang
-
 */
 
 // Prevent direct access
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-// Load main plugin class
-require_once 'includes/class-cornerstone.php';
+// Load plugin class
+require_once 'includes/utility/plugin-base.php';
+require_once 'includes/cornerstone-plugin.php';
 
 // Fire it up
-Cornerstone::run( __FILE__ );
+Cornerstone_Plugin::run( __FILE__ );

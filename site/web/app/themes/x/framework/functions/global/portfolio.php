@@ -150,7 +150,7 @@ function x_portfolio_filters() {
   //
 
   if ( $stack == 'integrity' ) {
-    $button_content = '<i class="x-icon-sort" data-x-icon="&#xf0dc;"></i> <span>' . x_get_option( 'x_integrity_portfolio_archive_sort_button_text', __( 'Sort Portfolio', '__x__' ) ) . '</span>';
+    $button_content = '<i class="x-icon-sort" data-x-icon="&#xf0dc;"></i> <span>' . x_get_option( 'x_integrity_portfolio_archive_sort_button_text' ) . '</span>';
   } elseif ( $stack == 'ethos' ) {
     $button_content = '<i class="x-icon-chevron-down" data-x-icon="&#xf078;"></i>';
   } else {
@@ -210,7 +210,7 @@ function x_portfolio_filters() {
 
 function x_portfolio_item_featured_content() {
 
-  if ( x_get_option( 'x_portfolio_enable_cropped_thumbs', '' ) == '1' ) :
+  if ( x_get_option( 'x_portfolio_enable_cropped_thumbs' ) == '1' ) :
     x_featured_portfolio( 'cropped' );
   else :
     x_featured_portfolio();
@@ -226,8 +226,8 @@ function x_portfolio_item_featured_content() {
 function x_portfolio_item_project_link() {
 
   $project_link  = get_post_meta( get_the_ID(), '_x_portfolio_project_link', true );
-  $launch_title  = x_get_option( 'x_portfolio_launch_project_title', __( 'Launch Project', '__x__' ) );
-  $launch_button = x_get_option( 'x_portfolio_launch_project_button_text', __( 'See it Live!', '__x__' ) );
+  $launch_title  = x_get_option( 'x_portfolio_launch_project_title' );
+  $launch_button = x_get_option( 'x_portfolio_launch_project_button_text' );
 
   if ( $project_link ) :
 
@@ -250,7 +250,7 @@ function x_portfolio_item_project_link() {
 function x_portfolio_item_tags() {
 
   $stack     = x_get_stack();
-  $tag_title = x_get_option( 'x_portfolio_tag_title', __( 'Skills', '__x__' ) );
+  $tag_title = x_get_option( 'x_portfolio_tag_title' );
 
   if ( has_term( NULL, 'portfolio-tag', NULL ) ) :
 
@@ -268,14 +268,14 @@ function x_portfolio_item_tags() {
 
 function x_portfolio_item_social() {
 
-  $share_project_title = x_get_option( 'x_portfolio_share_project_title', __( 'Share this Project', '__x__' ) );
-  $enable_facebook     = x_get_option( 'x_portfolio_enable_facebook_sharing', '1' );
-  $enable_twitter      = x_get_option( 'x_portfolio_enable_twitter_sharing', '1' );
-  $enable_google_plus  = x_get_option( 'x_portfolio_enable_google_plus_sharing', '' );
-  $enable_linkedin     = x_get_option( 'x_portfolio_enable_linkedin_sharing', '' );
-  $enable_pinterest    = x_get_option( 'x_portfolio_enable_pinterest_sharing', '' );
-  $enable_reddit       = x_get_option( 'x_portfolio_enable_reddit_sharing', '' );
-  $enable_email        = x_get_option( 'x_portfolio_enable_email_sharing', '' );
+  $share_project_title = x_get_option( 'x_portfolio_share_project_title' );
+  $enable_facebook     = x_get_option( 'x_portfolio_enable_facebook_sharing' );
+  $enable_twitter      = x_get_option( 'x_portfolio_enable_twitter_sharing' );
+  $enable_google_plus  = x_get_option( 'x_portfolio_enable_google_plus_sharing' );
+  $enable_linkedin     = x_get_option( 'x_portfolio_enable_linkedin_sharing' );
+  $enable_pinterest    = x_get_option( 'x_portfolio_enable_pinterest_sharing' );
+  $enable_reddit       = x_get_option( 'x_portfolio_enable_reddit_sharing' );
+  $enable_email        = x_get_option( 'x_portfolio_enable_email_sharing' );
 
   $share_url     = urlencode( get_permalink() );
   $share_title   = urlencode( get_the_title() );

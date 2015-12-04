@@ -36,20 +36,7 @@
 body {
   margin: 0;
   overflow-x: hidden;
-  font-family: $baseFontFamily;
-  @include font-size(1.4);
-  font-weight: $baseFontWeight;
   line-height: $baseLineHeight;
-  color: $textColor;
-  background: $bodyBackground;
-
-  &.x-navbar-fixed-left-active {
-    padding-left: $navbarFixedSideWidth;
-  }
-
-  &.x-navbar-fixed-right-active {
-    padding-right: $navbarFixedSideWidth;
-  }
 }
 
 
@@ -79,28 +66,12 @@ body {
   }
 }
 
-.x-post-slider-archive-active .x-container.main:before { top: 0; }
-
-.x-content-sidebar-active .x-container.main:before { right: 30%;    }
-.x-sidebar-content-active .x-container.main:before { left: 30%;     }
-.x-full-width-active      .x-container.main:before { left: -5000em; }
-
-@include break(cubs) {
-  .x-content-sidebar-active .x-container.main:before { left: -5000em; }
-  .x-sidebar-content-active .x-container.main:before { left: -5000em; }
-}
-
 
 
 // Links
 // =============================================================================
 
 a {
-  color: $linkColor;
   text-decoration: none;
   @include transition($linkTransitions);
-}
-
-a:hover {
-  color: $linkColorHover;
 }

@@ -18,7 +18,7 @@ if ( $is_blog || $is_archive ) :
     $info = array( 'archive', $type, get_queried_object_id(), '_x_ethos_post_slider_archives_display' );
   }
 
-  $slider_enabled = x_get_option( 'x_ethos_post_slider_' . $info[0] . '_enable', '' ) == '1';
+  $slider_enabled = x_get_option( 'x_ethos_post_slider_' . $info[0] . '_enable' ) == '1';
   $count          = x_get_option( 'x_ethos_post_slider_' . $info[0] . '_count' );
   $display        = x_get_option( 'x_ethos_post_slider_' . $info[0] . '_display' );
 

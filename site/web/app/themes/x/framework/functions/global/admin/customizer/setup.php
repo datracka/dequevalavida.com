@@ -17,6 +17,7 @@
 //   01. Set Path
 //   02. Require Files
 //   03. Update Native Customizer Functionality
+//   04. Overwrite Cached Options During Customizer Preview
 // =============================================================================
 
 // Set Path
@@ -64,3 +65,17 @@ function x_update_native_customizer_functionality( $wp_customize ) {
 }
 
 add_action( 'customize_register', 'x_update_native_customizer_functionality' );
+
+
+
+// Overwrite Cached Options During Customizer Preview
+// =============================================================================
+
+function x_inject_customizer_preview_options() {
+
+  add_filter( 'pre_option_x_cache_customizer_css', 'x_customizer_get_css' );
+  add_filter( 'pre_option_x_cache_google_fonts_request', 'x_get_google_fonts_request' );
+
+}
+
+add_action( 'customize_preview_init', 'x_inject_customizer_preview_options' );

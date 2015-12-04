@@ -58,19 +58,15 @@
     background-color: <?php echo $x_site_link_color_hover; ?>;
   }
 
-  <?php if ( $x_body_font_color_enable == 1 ) : ?>
-
-    .buddypress .x-list-item-header .activity,
-    .buddypress .x-list-item-header .time-since,
-    .buddypress .x-list-item-meta-inner > a,
-    .buddypress .x-list-item-meta-inner > .generic-button > a,
-    .buddypress .x-list-item-meta-inner > .meta,
-    .buddypress .x-list-item-meta-inner > .meta > a,
-    .buddypress .activity-list .activity-comments .ac-form a,
-    .buddypress .activity-list .x-activity-comments-inner > ul .acomment-options > a:after {
-      color: <?php echo $x_body_font_color; ?>;
-    }
-
-  <?php endif; ?>
+  .buddypress .x-list-item-header .activity,
+  .buddypress .x-list-item-header .time-since,
+  .buddypress .x-list-item-meta-inner > a,
+  .buddypress .x-list-item-meta-inner > .generic-button > a,
+  .buddypress .x-list-item-meta-inner > .meta,
+  .buddypress .x-list-item-meta-inner > .meta > a,
+  .buddypress .activity-list .activity-comments .ac-form a,
+  .buddypress .activity-list .x-activity-comments-inner > ul .acomment-options > a:after {
+    color: <?php echo $x_body_font_color; ?>;
+  }
 
 <?php endif; ?>

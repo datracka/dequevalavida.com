@@ -165,7 +165,7 @@ if ( ! function_exists( 'x_icon_comment_number' ) ) :
 
     $post_type      = get_post_type();
     $post_type_post = $post_type == 'post';
-    $no_post_meta   = x_get_option( 'x_blog_enable_post_meta', '' ) == '';
+    $no_post_meta   = x_get_option( 'x_blog_enable_post_meta' ) == '';
 
     if ( $post_type_post && $no_post_meta ) {
       return;

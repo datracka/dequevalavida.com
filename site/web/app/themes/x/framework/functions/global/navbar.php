@@ -102,7 +102,7 @@ if ( ! function_exists( 'x_get_navbar_positioning' ) ) :
     if ( x_is_one_page_navigation() ) {
       $output = 'fixed-top';
     } else {
-      $output = x_get_option( 'x_navbar_positioning', 'static-top' );
+      $output = x_get_option( 'x_navbar_positioning' );
     }
 
     return $output;
@@ -119,7 +119,7 @@ endif;
 if ( ! function_exists( 'x_get_logo_navigation_layout' ) ) :
   function x_get_logo_navigation_layout() {
 
-    return x_get_option( 'x_logo_navigation_layout', 'inline' );
+    return x_get_option( 'x_logo_navigation_layout' );
 
   }
 endif;
@@ -132,7 +132,7 @@ endif;
 if ( ! function_exists( 'x_navbar_searchform_overlay' ) ) :
   function x_navbar_searchform_overlay() {
 
-    if ( x_get_option( 'x_header_search_enable', '' ) == '1' ) :
+    if ( x_get_option( 'x_header_search_enable' ) == '1' ) :
 
       ?>
 
@@ -163,11 +163,11 @@ endif;
 if ( ! function_exists( 'x_navbar_search_navigation_item' ) ) :
   function x_navbar_search_navigation_item( $items, $args ) {
 
-    if ( x_get_option( 'x_header_search_enable', '' ) == '1' ) {
+    if ( x_get_option( 'x_header_search_enable' ) == '1' ) {
       if ( $args->theme_location == 'primary' ) {
         $items .= '<li class="menu-item x-menu-item x-menu-item-search">'
                   . '<a href="#" class="x-btn-navbar-search">'
-                    . '<span><i class="x-icon-search" data-x-icon="&#xf002;"></i><span class="x-hidden-desktop"> ' . __( 'Search', '__x__' ) . '</span></span>'
+                    . '<span><i class="x-icon-search" data-x-icon="&#xf002;" aria-hidden="true"></i><span class="x-hidden-desktop"> ' . __( 'Search', '__x__' ) . '</span></span>'
                   . '</a>'
                 . '</li>';
       }

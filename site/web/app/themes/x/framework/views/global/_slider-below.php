@@ -6,18 +6,9 @@
 // Slider output below the header.
 // =============================================================================
 
-if ( X_REVOLUTION_SLIDER_IS_ACTIVE ) :
+if ( X_REVOLUTION_SLIDER_IS_ACTIVE || X_LAYERSLIDER_IS_ACTIVE ) :
 
-  GLOBAL $post;
-
-  if ( is_home() ) {
-    $id = get_option( 'page_for_posts' );
-  } elseif ( x_is_shop() ) {
-    $id = woocommerce_get_page_id( 'shop' );
-  } else {
-    $id = $post->ID;
-  }
-
+  $id            = x_get_the_ID();
   $slider_active = get_post_meta( $id, '_x_slider_below', true );
   $slider        = ( $slider_active == '' ) ? 'Deactivated' : $slider_active;
 
@@ -44,12 +35,12 @@ if ( X_REVOLUTION_SLIDER_IS_ACTIVE ) :
         </style>
 
         <a href="#" class="x-slider-scroll-bottom below <?php echo $anchor_alignment; ?>">
-          <i class="x-icon-angle-down" data-x-icon="&#xf107;"></i>
+          <i class="x-icon-angle-down" data-x-icon="&#xf107;" aria-hidden="true"></i>
         </a>
 
       <?php endif; ?>
 
-      <?php putRevSlider( $slider ); ?>
+      <?php echo do_shortcode( x_get_slider_shortcode( $slider ) ); ?>
 
     </div>
 

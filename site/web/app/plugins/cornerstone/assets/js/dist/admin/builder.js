@@ -1,282 +1,5 @@
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.CS_builder = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-/**
- * Load Global Dependencies
- */
-window.Marionette = window.Mn = require('backbone.marionette');
-window.moment = require('moment');
-window.NProgress = require('nprogress');
-window.Mousetrap = require('mousetrap');
-require('mousetrap/plugins/global-bind/mousetrap-global-bind');
-window.ColorLib = require('../vendor/color');
-window.FileSaver = require('../vendor/FileSaver');
-require('backbone.stickit');
-require('backbone.radio');
-require('perfect-scrollbar/jquery')(Backbone.$);
-require('../vendor/html.sortable');
-require('../vendor/string_score');
-require('../vendor/pointer-events-polyfill');
-require('../vendor/rgbaster');
-require('../vendor/jquery.growl');
-require('./utility/string-replace-all');
-
-/**
- * Fire it up
- */
-require('./app')();
-},{"../vendor/FileSaver":137,"../vendor/color":138,"../vendor/html.sortable":139,"../vendor/jquery.growl":140,"../vendor/pointer-events-polyfill":141,"../vendor/rgbaster":142,"../vendor/string_score":143,"./app":2,"./utility/string-replace-all":36,"backbone.marionette":145,"backbone.radio":146,"backbone.stickit":147,"moment":149,"mousetrap":150,"mousetrap/plugins/global-bind/mousetrap-global-bind":151,"nprogress":152,"perfect-scrollbar/jquery":153}],2:[function(require,module,exports){
-var App = Mn.Application.extend({
-
-  initialize: function() {
-
-    /**
-     * Add Pub/Sub for config values
-     * Access anywhere with something like this:
-     *   var value = cs.config.request('key');
-     */
-    this.setupConfig();
-    this.config.reply( this.Config );
-
-    /**
-     * Debug Mode
-     */
-    if (this.Config.debug == 'true') {
-      Backbone.Radio.DEBUG = true;
-      Backbone.Radio.tuneIn('cs');
-    }
-
-
-    /**
-     * Allow modules to communicate across iFrames using our messenger mixin
-     */
-    //_.extend( Mn.Module.prototype, require('./utility/messenger') );
-
-    /**
-     * Load Templates & Icons
-     */
-    this.Templates = (this.Config.isPreview == "true") ? require('../tmp/templates-elements.js') : require('../tmp/templates-builder.js');
-    this.Icons = require('../tmp/templates-svg.js');
-
-    this.bootTime = new Date().getTime();
-  },
-
-  onBeforeStart: function(options) {
-
-    /**
-     * Load Behaviors and set Mn lookup location
-     */
-    this.Behaviors = require('./behaviors')
-    Mn.Behaviors.behaviorsLookup = _.bind( function() { return this.Behaviors; }, this );
-
-
-    /**
-     * Use Custom Template Renderer with Marionette
-     */
-    Mn.Renderer = require('./utility/renderer');
-
-    /**
-     * Setup our remote rendering.
-     * This is how HTML for the preview window is generated.
-     */
-    var RenderQueue = require('./utility/render-queue');
-    this.renderQueue = new RenderQueue();
-
-    this.loadModels();
-
-  },
-
-  /**
-   * Load Preview / Editor Mode
-   */
-  onStart: function() {
-    var mode = (this.Config.isPreview == "true") ? this.loadPreview() : this.loadEditor();
-    this.Mode = new mode;
-  },
-
-  /**
-   * Add generated configuration values
-   */
-  setupConfig: function() {
-    this.Config.publicElementSections = _.map( this.Config.elementLibrarySections,
-      function( item ) { return item.name; }
-    );
-  },
-
-  loadModels: function() {
-
-    this.Models = { Base: require('./data/models/element-base') };
-    _.extend( this.Models, require('./data/models') );
-
-    this.modelLookup = function ( id ) {
-      return this.Models[id] || this.Models.Base;
-    }
-
-    this.Collections = { Base: require('./data/models/sortable-collection') };
-    _.extend( this.Collections, require('./data/models/collection-index') );
-
-    this.collectionLookup = function ( id ) {
-      return this.Collections[id] || this.Collections.Base;
-    }
-
-  },
-
-  loadPreview: function() {
-
-    xData.isPreview = true;
-    cs.config.trigger( 'load:preview' );
-    /**
-     * Setup ElementViews
-     * Additional views can be added later if needed. For example:
-     *    var CustomView = cs.ElementViews.Base.extend({});
-     *    _.extend(cs.ElementViews, { 'custom_view': CustomView });
-     */
-    var base = require('./views/elements/base');
-    this.ElementViews = {
-      Base: base.Base,
-      BaseCore: base.BaseCore
-    };
-    _.extend( this.ElementViews, require('./views/elements') );
-
-    /**
-     * Lookup an Inspector Control
-     */
-    this.elementLookup = function ( id ) {
-      return this.ElementViews[id] || this.ElementViews.Base;
-    }
-
-    /**
-     * Announce that we're about to load the Preview Window
-     * This is when integrations can register element views
-     */
-    cs.config.trigger( 'load:editor' );
-
-    window.onbeforeunload = _.bind( this.cleanUpPreview, this );
-
-    return require('./modules/preview');
-
-  },
-
-  cleanUpPreview: function() {
-    delete this.ElementViews;
-    delete this.Icons;
-  },
-
-  loadEditor: function() {
-
-    require('./utility/custom-media-manager');
-
-    /**
-     * Setup ControlViews
-     * Additional views can be added later if needed. For example:
-     *    var CustomView = cs.ControlViews.Base.extend({});
-     *    _.extend(cs.ControlViews, { 'custom_view': CustomView });
-     */
-    this.ControlViews = { Base: require('./views/controls/base') };
-    _.extend( this.ControlViews, require('./views/controls') );
-
-    /**
-     * Lookup an Inspector Control
-     */
-    this.controlLookup = function ( id ) {
-      return this.ControlViews[id] || this.ControlViews.Base;
-    }
-
-    /**
-     * Announce that we're about to load the Editor
-     * This would be an ideal time for external integratin to register control views
-     */
-    cs.config.trigger( 'load:editor' );
-
-    return require('./modules/editor');
-
-  },
-
-  /**
-   * Template Accessor
-   * Usage:  cs.template('path/to/template');
-   *         cs.template('path','to','template');
-   */
-  template: function () {
-    return this.Templates[ (arguments.length == 1) ? arguments[0] : arguments.join('/') ];
-  },
-
-  /**
-   * Icon Accessor
-   * Usage:  cs.icon('path/to/icon');
-   *         cs.icon('path','to','icon');
-   */
-  icon: function () {
-    var key = (arguments.length == 1) ? arguments[0] : arguments.join('/');
-    return (this.Icons[ key ]) ? this.Icons[ key ]() : ( key.indexOf("element-") == 0 ) ? this.Icons[ 'element-custom' ]() : '<i class="cs-icon fallback" data-cs-icon="' + this.fontIcon() + '"><!-- icon '+ key +' not found--></i>';
-  },
-
-  /**
-   * Get an icon from a font awesome icon name
-   */
-  fontIcon: function() {
-    return String.fromCharCode("0x" + this.fontIconLookup(arguments[0] || undefined) ); //return  '&#x' + this.fontIconLookup( arguments[0] || undefined ) + ';';
-  },
-
-  /**
-   * Get a unicode value from a Font Awesome icon name
-   * @return {[type]} [description]
-   */
-  fontIconLookup: function() {
-    var def = 'spinner';
-    var key = arguments[0] || def;
-    return (this.Config.fontAwesome[ key ]) ? this.Config.fontAwesome[ key ] : this.Config.fontAwesome[ def ];
-  },
-
-
-  /**
-   * Localization helper
-   */
-  l18n: function( key ) {
-    return this.Config.strings[key] || '';
-  },
-
-  /**
-   * Shim Backbone.Radio instead of Wreqr
-   */
-  _initChannel: function() {
-    this.channelName = 'cs';
-    this.channel = Backbone.Radio.channel( this.channelName );
-  },
-
-  /**
-   * Additional Pub/Sub channels
-   */
-  config:   Backbone.Radio.channel( 'cs:config' ),
-  data:     Backbone.Radio.channel( 'cs:data' ),
-  preview:  Backbone.Radio.channel( 'cs:preview' ),
-  observer: Backbone.Radio.channel( 'cs:observer' ),
-  tooltips: Backbone.Radio.channel( 'cs:tooltips' ),
-  options:  Backbone.Radio.channel( 'cs:options' ),
-  extra:    Backbone.Radio.channel( 'cs:extra' ),
-  navigate: Backbone.Radio.channel( 'cs:navigate' ),
-  search:   Backbone.Radio.channel( 'cs:search' ),
-  confirm:  Backbone.Radio.channel( 'cs:confirm' ),
-  message:  Backbone.Radio.channel( 'cs:message' ),
-  keybind:  Backbone.Radio.channel( 'cs:keybind' ),
-
-  log: function() {
-    if (this.Config.debug == 'true')
-      console.log.apply( console, arguments );
-  },
-
-  warn: function() {
-    if (this.Config.debug == 'true') {
-      console.warn.apply( console, arguments );
-      console.trace();
-    }
-  }
-
-});
-
-module.exports = function(){
-  ( window.cs = new App( { Config: window.cs() } ) ).start({});
-}
-},{"../tmp/templates-builder.js":134,"../tmp/templates-elements.js":135,"../tmp/templates-svg.js":136,"./behaviors":5,"./data/models":18,"./data/models/collection-index":9,"./data/models/element-base":14,"./data/models/sortable-collection":28,"./modules/editor":29,"./modules/preview":31,"./utility/custom-media-manager":33,"./utility/render-queue":34,"./utility/renderer":35,"./views/controls":52,"./views/controls/base":38,"./views/elements":98,"./views/elements/base":83}],3:[function(require,module,exports){
-module.exports = Mn.Behavior.extend({
+module.exports = Cornerstone.Mn.Behavior.extend({
 
   defaults: {
     message: cs.l18n('confirm-message'),
@@ -314,8 +37,8 @@ module.exports = Mn.Behavior.extend({
   }
 
 });
-},{}],4:[function(require,module,exports){
-module.exports = Mn.Behavior.extend({
+},{}],2:[function(require,module,exports){
+module.exports = Cornerstone.Mn.Behavior.extend({
 
   defaults: {
     message: cs.l18n('confirm-message'),
@@ -353,1135 +76,312 @@ module.exports = Mn.Behavior.extend({
   }
 
 });
-},{}],5:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 module.exports.Confirm = require('./confirm');
 module.exports.ConfirmWarn = require('./confirm-warn');
-},{"./confirm":4,"./confirm-warn":3}],6:[function(require,module,exports){
-var BlockCollection = Backbone.Collection.extend({
-  model: require('./block'),
-  section: function( section ) {
+},{"./confirm":2,"./confirm-warn":1}],4:[function(require,module,exports){
+var Mousetrap = require('mousetrap')
+require('mousetrap/plugins/global-bind/mousetrap-global-bind');
+Cornerstone.Vendor.Mousetrap = Mousetrap;
+Cornerstone.Vendor.NProgress = require('nprogress');
+Cornerstone.Vendor.moment = require('moment');
+require('perfect-scrollbar/jquery')(Backbone.$);
+require('../vendor/html.sortable');
+require('../vendor/pointer-events-polyfill');
+require('../vendor/rgbaster');
+require('../vendor/jquery.growl');
+require('../vendor/jquery.visible');
+require('./utility/jquery.shadow-height');
+require('./utility/string-replace-all');
+
+
+/**
+ * Fire it up
+ */
+cs.registerComponents( require('./components') );
+cs.updateConfig( csBuilderData );
+cs.updateRegistry( {
+	start: [
+		'mn-extensions',
+		'template-loader',
+		'view-loader',
+		'model-loader',
+		'render-queue',
+		'keybindings',
+		'builder'
+	],
+	editor: [
+		'editor',
+		'post-handler',
+		'options',
+		'navigator',
+		'template-manager',
+		'layout',
+		'layout-section',
+		'layout-templates',
+		'inspector',
+		'settings'
+	],
+	preview: [ 'preview' ]
+} );
+
+// //cs.loadComponents( (cs.config( 'isPreview' )) ? 'preview' : 'editor' );
+},{"../vendor/html.sortable":113,"../vendor/jquery.growl":114,"../vendor/jquery.visible":115,"../vendor/pointer-events-polyfill":116,"../vendor/rgbaster":117,"./components":22,"./utility/jquery.shadow-height":25,"./utility/string-replace-all":28,"moment":118,"mousetrap":119,"mousetrap/plugins/global-bind/mousetrap-global-bind":120,"nprogress":121,"perfect-scrollbar/jquery":122}],5:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
 
-    bySection = this.filter( function( shortcode ) {
-      return shortcode.get('section') === section;
-    });
-
-    return new BlockCollection( bySection );
-  },
-});
-module.exports = BlockCollection;
-},{"./block":8}],7:[function(require,module,exports){
-
-module.exports = Backbone.Model.extend({
-  defaults: {
-    action: 'blank',
-    title: cs.l18n( 'templates-title' ),
-  },
-  setup: function() {
-
-  	this.listenTo( cs.data, 'new:template', this.addTemplate );
-  	this.listenTo( cs.data, 'delete:template', this.deleteTemplate );
-
-  	var templates = this.get('allblocks');
-
-  	this.set('sections', new Backbone.Collection([
-	  	new Backbone.Model({
-	  		title: cs.l18n( 'templates-themeco-pages' ),
-	  		name: 'themeco-pages',
-	  		templates: templates.section('themeco-pages')
-	  	}), new Backbone.Model({
-	  		title: cs.l18n( 'templates-themeco-blocks' ),
-	  		name: 'themeco-blocks',
-	  		templates: templates.section('themeco-blocks')
-	  	}), new Backbone.Model({
-	  		title: cs.l18n( 'templates-user-pages' ),
-	  		name: 'user-pages',
-	  		templates: templates.section('user-pages')
-	  	}), new Backbone.Model({
-	  		title: cs.l18n( 'templates-user-blocks' ),
-	  		name: 'user-blocks',
-	  		templates: templates.section('user-blocks')
-	  	})
-  	]) );
-
-  },
-
-  addTemplate: function( template ) {
-  	var section;
-
-  	this.get('allblocks').add(template);
-
-  	if (section = this.get('sections').findWhere( { name: template.section } )) {
-  		section.get('templates').add( template );
-  	}
-
-  },
-
-  deleteTemplate: function( slug ) {
-
-  	var item, templates;
-
-  	if (item = this.get('allblocks').findWhere( { slug: slug } ) ) {
-  		this.get('allblocks').remove( item );
-  	}
-
-  	this.get('sections').each( function( section ) {
-  		templates = section.get('templates');
-  		if ( item = templates.findWhere( { slug: slug } ) );
-  			templates.remove( item );
-  	});
-
-    cs.data.trigger( 'delete:template:remote', slug );
-
-  }
-});
-},{}],8:[function(require,module,exports){
-module.exports = Backbone.Model.extend({
-  defaults: {
-    title: 'Generic Block',
-    elements: []
-  }
-});
-},{}],9:[function(require,module,exports){
-module.exports = {
-	'section': require('./section-collection'),
-	'row': require('./row-collection'),
-	'column': require('./column-collection'),
-}
-},{"./column-collection":10,"./row-collection":21,"./section-collection":24}],10:[function(require,module,exports){
-var SortableCollection = require('./sortable-collection');
-// ColumnCollection
-module.exports = SortableCollection.extend({
-  model: require('./column'),
-});
-},{"./column":11,"./sortable-collection":28}],11:[function(require,module,exports){
-// Column
-var ElementBase = require('./element-base');
-var Column = ElementBase.extend({
-  defaults: {
-    active: false,
-    size: '1/1',
-    title: '1/1',
-    elType: 'column',
-    childType: 'any',
-    elements: [],
-  },
-
-  initialize: function() {
-    this.on( 'create:element', this.createElement );
-    this.on( 'receive:element', this.receiveElement );
-
-    this.on('set:defaults:done',function(){
-      this.updateMetaTitle();
-      this.on( 'change:title', this.updateMetaTitle );
-    })
-
-    this.on( 'nav:kylelements', function(){
-      cs.navigate.trigger('pane', 'elements' );
-    });
-  },
-
-  createElement: function( type, pos ) {
-    if (!type) return;
-    this.get('elements').create( { elType: type }, pos  );
-  },
-
-  receiveElement: function( model, pos, markupCache ) {
-
-    if (!model) return;
-
-    this.get('elements').create( model, pos, markupCache );
-
-  },
-
-  updateMetaTitle: function() {
-    var meta = this.get('meta');
-    meta.tooltip = meta.elTitle + ' &ndash; ' + this.get( 'title' );
-    this.set( 'meta', meta );
-  }
-
-});
-module.exports = Column;
-},{"./element-base":14}],12:[function(require,module,exports){
-var ControlCollection = Backbone.Collection.extend({
-	model: require('./control'),
-
-	initialize: function( models, options ) {
-		var options = options || {};
-		this.proxy = options.proxy || null;
-		this.on('add', function( model, collection ) {
-			model.setProxy.call( model, collection.proxy );
-		});
-
-		this.on('reset', function( collection ) {
-			collection.invoke( 'setProxy', collection.proxy );
-		});
-
-	},
-
-	setProxy: function( model) {
-		return this.proxy = model;
-	},
-
-	getProxy: function() {
-		return this.proxy;
-	},
-
-	hasProxyChanged: function( model ) {
-		return ( this.proxy && this.proxy.cid == model.cid)
-	}
-});
-ControlCollection.prototype.sync = function() { return null; };
-ControlCollection.prototype.fetch = function() { return null; };
-ControlCollection.prototype.save = function() { return null; };
-module.exports = ControlCollection;
-},{"./control":13}],13:[function(require,module,exports){
-var Control = Backbone.Model.extend({
-	defaults: {
-		name: 'feature',
-		controlType: 'toggle',
-		controlTitle: null,
-		controlTooltip: null,
-		defaultValue: null,
-		options: {}
-	},
-	values: function() {
-		return _.omit(this.toJSON(), 'name', 'controlType', 'controlTitle', 'controlTooltip', 'defaultValue', 'options' );
-	},
-
-	setProxy: function( proxy ) {
-		this.proxy = proxy;
-		this.listenTo(this.proxy, 'change', function(){
-			cs.data.trigger( 'page:updated', true );
-		});
-	}
-});
-
-Control.prototype.sync = function() { return null; };
-Control.prototype.fetch = function() { return null; };
-Control.prototype.save = function() { return null; };
-module.exports = Control;
-},{}],14:[function(require,module,exports){
-// ElementBase
-var ElementBase = Backbone.Model.extend({
-
-  defaults: {
-    elType: '',
-    elements: []
-  },
-
-  constructor: function( data, options ) {
-
-    Backbone.Model.apply(this,arguments);
-
-    var elementLibrary = cs.data.request( 'get:elementLibrary' );
-    this.elType = elementLibrary.findWhere( { name: this.get('elType') } );
-
-
-    if (!this.elType) {
-      console.warn( 'Malformed Element:', this, 'Type', this.elType ); return;
-    }
-
-    var childType = this.elType.get('childType');
-
-    if (childType) {
-      this.set( 'childType', childType )
-    }
-
-    var childType = this.get('childType')
-    var collectionType = cs.collectionLookup( childType );
-    this.setDefaults();
-
-    var elements = this.get('elements');
-    _.each( elements, function(item) {
-      if ( !item.elType ) item.elType = childType;
-    } );
-
-    var collection = new collectionType( elements, { childType: childType, parentEl: this } )
-    if ( this.elType.get('renderChild')) {
-      this.listenTo( collection, 'sort', this.queueRemoteRender );
-      this.listenTo( collection, 'remove', this.queueRemoteRender );
-    }
-    this.set( 'elements', collection );
-
-
-    this.markupCache = options.markupCache || '';
-    this.on('delegate:render', this.queueRemoteRender );
-    this.on('change', this.queueRemoteRender );
-
-    this.on('view:init', function(){
-      if ( this.markupCache == '' || this.markupCache === false )
-        this.queueRemoteRender();
-    } );
-
-
-    this.on('inspect', this.inspect);
-
-  },
-
-  setDefaults: function() {
-
-    this.set({
-      meta: {
-        //type: this.elType,
-        render: this.elType.get('render'),
-        delegate: this.elType.get('delegate'),
-        elTitle: this.elType.get('title'),
-        tooltip: this.elType.get('title')
-      }
-    })
-
-    // Find my controls, and populate defaults upon creation
-    _.each( this.elType.get('controls'), function( control ) {
-
-      var controlValue = this.get( control.name );
-
-      if ( _.isUndefined( controlValue ) || ( control.name == 'elements' && _.isEmpty( controlValue ) ) )
-        this.set( control.name, control.defaultValue );
-
-    }, this );
-
-    this.trigger('set:defaults:done');
-  },
-
-  queueRemoteRender: function( model ) {
-
-    var meta = this.get('meta');
-
-    if ( !meta ) return;
-
-    if ( this.collection && meta.delegate && this.collection.parentEl) {
-      this.collection.parentEl.trigger( 'delegate:render' );
-    }
-
-    if ( model && model.changed && !this.elType.get('renderChild') ) {
-      if( _.size(model.changed) == 1 && _.contains(_.keys( model.changed ), 'rank') ) {
-        return;
-      }
-    }
-
-    if ( !meta.render ) return;
-
-    cs.renderQueue.queue( this.cid, this.toJSON(), _.bind( function( response ) {
-      this.markupCache = ( _.isFunction( response ) ) ? Mn.Renderer.render( response ) : response;
-      this.trigger( 'remote:render' );
-    }, this ) );
-
-  },
-
-  inspect: function( options ){
-    options = _.extend( options || {}, { model: this } );
-    cs.navigate.trigger( 'inspector', options );
-  },
-
-  toJSON: function() {
-
-    var data = Backbone.Model.prototype.toJSON.apply( this, arguments );
-
-    var elements = this.get('elements');
-
-    if (elements)
-      data.elements = (elements.toJSON) ? elements.toJSON() : elements;
-
-    var omit = [ 'meta', 'rank' ];
-    if (_.isEmpty(data.elements))
-      omit.push('elements');
-
-    return _.omit( data, omit );
-  }
-
-});
-module.exports = ElementBase;
-},{}],15:[function(require,module,exports){
-// ElementStubCollection
-var ElementStubCollection = Backbone.Collection.extend({
-	model: require('./element-stub'),
-
-	section: function( section ) {
-
-	  bySection = this.filter( function( shortcode ) {
-	    return shortcode.get('section') === section;
-	  });
-
-	  return new ElementStubCollection( bySection );
-	}
-});
-
-module.exports = ElementStubCollection;
-},{"./element-stub":16}],16:[function(require,module,exports){
-// ElementStub
-module.exports = Backbone.Model.extend({
-  defaults: {
-    name: 'generic',
-    title: 'Generic',
-    icon: '&#xf068;',
-    section: 'Structure'
-  }
-});
-},{}],17:[function(require,module,exports){
-// Element
-var ElementBase = require('./element-base');
-var Element = ElementBase.extend({
-
-});
-
-module.exports = Element;
-},{"./element-base":14}],18:[function(require,module,exports){
-module.exports = {
-	'section': require('./section'),
-	'row': require('./row'),
-	'column': require('./column'),
-}
-},{"./column":11,"./row":23,"./section":25}],19:[function(require,module,exports){
-module.exports = Backbone.Model.extend({
-	defaults: {
-		show_help_text: true,
-		show_adv_controls: false
-	},
 	initialize: function() {
 
-		_.each( _.keys( this.attributes ), _.bind( function( key ) {
+		cs.extra    = Backbone.Radio.channel( 'cs:extra' );
+		cs.observer = Backbone.Radio.channel( 'cs:observer' );
+	  cs.tooltips = Backbone.Radio.channel( 'cs:tooltips' );
+	  cs.search   = Backbone.Radio.channel( 'cs:search' );
+	  cs.confirm  = Backbone.Radio.channel( 'cs:confirm' );
+	  cs.message  = Backbone.Radio.channel( 'cs:message' );
 
-			var savedValue = localStorage['cs_options_' + key ];
-
-			this.on('change:' + key, function( model, value ) {
-			  localStorage['cs_options_' + key ] = value;
-			});
-
-			if ( _.isUndefined( savedValue ) ) return;
-
-			if ( savedValue == 'true') savedValue = true;
-			if ( savedValue == 'false') savedValue = false;
-
-			this.set( key, savedValue);
-
-		}, this ) );
-
-		cs.options.reply( 'help:text', this.get('show_help_text') );
-		cs.options.reply( 'adv:controls', this.get('show_adv_controls') );
-
-		this.on('change:show_help_text', function( model, value ) {
-			cs.options.reply( 'help:text', value );
-			cs.options.trigger( 'help:text', value );
-			cs.options.trigger( 'changed' );
-		});
-
-		this.on('change:show_adv_controls', function( model, value ) {
-			cs.options.reply( 'adv:controls', value );
-			cs.options.trigger( 'adv:controls', value );
-			cs.options.trigger( 'changed' );
-		});
+		this.cs.loadComponents( ( this.cs.config( 'isPreview' ) == 'true' ) ? 'preview' : 'editor'  );
 	}
-})
-},{}],20:[function(require,module,exports){
-// Post
-var ajax = require('../../utility/ajax.js');
-var ElementBase = require('./element-base');
-var Post = Backbone.Model.extend({
-  defaults: {
-    elements: [],
-    childType: 'section'
-  },
-
-  initialize: function(options) {
-    var childType = this.get('childType')
-    var collectionType = cs.collectionLookup( childType );
-    this.set( 'elements', new collectionType( this.get('elements'), { childType: childType } ) );
-  },
-
-  saveRemote: function() {
-
-    NProgress.configure({ showSpinner: false, speed: 850, minimum: 0.925 });
-    NProgress.start();
-
-    ajax.post( 'cs_endpoint_rows', {
-      data: {
-      	post: JSON.stringify( this.toJSON() )
-      },
-      success: function( response ) {
-        cs.log(response);
-        cs.data.reply('saved:last', moment() );
-        cs.channel.trigger( 'save:complete' )
-        cs.data.trigger( 'page:updated', false );
-        if ( cs.navigate.request( 'active:pane' ) == 'settings' ) {
-          localStorage['CornerstonePane'] = 'settings';
-          location.reload();
-          //cs.preview.trigger('refresh');
-        }
-        NProgress.done();
-      },
-      error: function( response ) {
-        cs.channel.trigger( 'save:error' );
-        cs.log(response);
-        NProgress.done();
-      },
-    } );
-  },
-
-  saveTemplate: function( type, title ) {
-
-    ajax.post( 'cs_save_template', {
-      data: {
-        post: JSON.stringify( _.extend( _.omit( this.toJSON(), [ 'post_id', 'settings', 'childType' ] ), {
-          type: type || 'block',
-          title: title || 'Untitled'
-        })),
-      },
-      success: function( response ) {
-        cs.log(response);
-        cs.data.trigger( 'new:template', response.template );
-        cs.message.trigger( 'success', cs.l18n( 'templates-saved' ), 4000 );
-      },
-      error: function( response ) {
-        cs.log(response);
-        cs.message.trigger( 'error', cs.l18n( 'templates-error-save' ), 10000 );
-      },
-    } );
-  },
-
-  deleteTemplate: function( slug ) {
-
-    ajax.post( 'cs_delete_template', {
-      data: {
-        slug: slug
-      },
-      success: function( response ) {
-        cs.log(response);
-        cs.message.trigger( 'success', cs.l18n( 'templates-delete-success' ), 4000 );
-      },
-      error: function( response ) {
-        cs.log(response);
-        cs.message.trigger( 'error', cs.l18n( 'templates-error-delete' ), 10000 );
-      },
-    } );
-  },
-
-  toJSON: function() {
-
-    var data = ElementBase.prototype.toJSON.apply( this, arguments );
-
-    var settings = this.get('settings');
-
-    if (settings)
-      data.settings = ( _.isFunction( settings.toJSON ) ) ? settings.toJSON() : settings;
-
-    var omit = [ 'meta', 'rank' ];
-    // if (_.isEmpty(data.elements))
-    //   omit.push('elements');
-
-    return _.omit( data, omit );
-  }
 
 });
-module.exports = Post;
-},{"../../utility/ajax.js":32,"./element-base":14}],21:[function(require,module,exports){
-// RowCollection
-var SortableCollection = require('./sortable-collection');
-module.exports = SortableCollection.extend({
-  model: require('./row'),
+},{}],6:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
 
-  initialize: function() {
-  	this.on( 'remove', this.keepOne );
-    this.on( 'add', this.autoSelect );
+	bindings: {
+    'ark': 'up up down down left right left right b a enter'
   },
 
-  autoSelect: function( model ) {
-    _.defer( function() {
-      cs.navigate.trigger( 'layout:column', { model: model } );
-    });
-  },
+	initialize: function( options ) {
 
-  keepOne: function() {
-  	if ( this.length <= 0 ) {
-  		var model = this.create( { title: cs.l18n('layout-new-row').replace('%s', 1 ) } );
-  	}
-    cs.navigate.trigger( 'layout:column', null );
-  }
-});
-},{"./row":23,"./sortable-collection":28}],22:[function(require,module,exports){
-module.exports.layoutIsValid = function( layout ) {
-	return _([ '1/1','1/2 + 1/2','2/3 + 1/3','1/3 + 2/3','1/3 + 1/3 + 1/3','3/4 + 1/4','1/4 + 3/4','1/2 + 1/2','1/2 + 1/4 + 1/4','1/4 + 1/2 + 1/4','1/4 + 1/4 + 1/2','1/4 + 1/4 + 1/4 + 1/4','4/5 + 1/5','1/5 + 4/5','3/5 + 2/5','2/5 + 3/5','3/5 + 1/5 + 1/5','1/5 + 3/5 + 1/5','1/5 + 1/5 + 3/5','2/5 + 2/5 + 1/5','2/5 + 1/5 + 2/5','1/5 + 2/5 + 2/5','2/5 + 1/5 + 1/5 + 1/5','1/5 + 2/5 + 1/5 + 1/5','1/5 + 1/5 + 2/5 + 1/5','1/5 + 1/5 + 1/5 + 2/5','1/5 + 1/5 + 1/5 + 1/5 + 1/5','5/6 + 1/6','1/6 + 5/6','2/3 + 1/3','1/3 + 2/3','2/3 + 1/6 + 1/6','1/6 + 2/3 + 1/6','1/6 + 1/6 + 2/3','1/2 + 1/2','1/2 + 1/3 + 1/6','1/2 + 1/6 + 1/3','1/3 + 1/2 + 1/6','1/3 + 1/6 + 1/2','1/6 + 1/2 + 1/3','1/6 + 1/3 + 1/2','1/2 + 1/6 + 1/6 + 1/6','1/6 + 1/2 + 1/6 + 1/6','1/6 + 1/6 + 1/2 + 1/6','1/6 + 1/6 + 1/6 + 1/2','1/3 + 1/3 + 1/3','1/3 + 1/3 + 1/6 + 1/6','1/3 + 1/6 + 1/3 + 1/6','1/3 + 1/6 + 1/6 + 1/3','1/6 + 1/3 + 1/3 + 1/6','1/6 + 1/3 + 1/6 + 1/3','1/6 + 1/6 + 1/3 + 1/3','1/3 + 1/6 + 1/6 + 1/6 + 1/6','1/6 + 1/3 + 1/6 + 1/6 + 1/6','1/6 + 1/6 + 1/3 + 1/6 + 1/6','1/6 + 1/6 + 1/6 + 1/3 + 1/6','1/6 + 1/6 + 1/6 + 1/6 + 1/3','1/6 + 1/6 + 1/6 + 1/6 + 1/6 + 1/6' ])
-				  .contains( layout );
-}
+		cs.keybind = Backbone.Radio.channel( 'cs:keybind' );
 
-module.exports.reduceFractions = function( replace ) {
-  reductions = [{f:'2\/4', r: '1/2'},{f:'2\/6', r: '1/3'},{f:'3\/6', r: '1/2'},{f:'4\/6', r: '2/3'}];
-  var string = replace;
-  _(reductions).each(function(reducer){
-    var re = new RegExp(reducer.f,"g");
-    string = string.replace(re,reducer.r)
-  });
-  return string;
-}
-},{}],23:[function(require,module,exports){
-// Row
-var ElementBase = require('./element-base');
-var Row = ElementBase.extend({
+		// Wait until cs.global is ready
+		this.listenTo( cs.events, 'editor:init', this.setup );
+		this.listenTo( cs.events, 'preview:iframe:reloaded', this.setup );
 
-  defaults: {
-    title: 'New Row',
-    columnLayout: '1/1',
-    marginlessColumns: false,
-    elements: [ { active: true }, {}, {}, {}, {}, {} ],
-    childType: 'column'
-  },
-
-  initialize: function() {
-    this.on('set:defaults:done',function(){
-      _.defer( _.bind( this.updateMetaTitle, this ) );
-      this.on( 'change:title', this.updateMetaTitle );
-      this.on( 'position:updated', this.updateMetaTitle );
-    })
-  },
-
-  updateMetaTitle: function() {
-    var meta = this.get('meta');
-    var parentTitle = this.collection.parentEl.get('title');
-    meta.tooltip = cs.l18n('layout-new-row').replace('%s', this.collection.indexOf(this) + 1 );
-    this.set( 'meta', meta );
-  }
-
-});
-module.exports = Row;
-},{"./element-base":14}],24:[function(require,module,exports){
-// RowCollection
-var SortableCollection = require('./sortable-collection');
-module.exports = SortableCollection.extend({
-  model: require('./section')
-});
-},{"./section":25,"./sortable-collection":28}],25:[function(require,module,exports){
-// Section
-var ElementBase = require('./element-base');
-var Section = ElementBase.extend({
-
-  defaults: {
-    title: 'Section 1',
-    elements: [ { title: 'Row 1' } ],
-    childType: 'row'
-  },
-
-  initialize: function() {
-    // var childType = this.get('childType')
-    // var collectionType = cs.collectionLookup( childType );
-    // this.set( 'elements', new collectionType( this.get('elements'), { childType: childType } ) );
-
-    this.on('set:defaults:done',function(){
-      this.updateMetaTitle();
-      this.on( 'change:title', this.updateMetaTitle );
-    })
-  },
-
-  updateMetaTitle: function() {
-    var meta = this.get('meta');
-    meta.tooltip = meta.elTitle + ' &ndash; ' + this.get( 'title' );
-    this.set( 'meta', meta );
-  }
-
-});
-module.exports = Section;
-},{"./element-base":14}],26:[function(require,module,exports){
-module.exports = Backbone.Collection.extend({
-	model: require('./setting-section'),
-	comparator: function( m ) {
-    return m.get('priority');
-  },
-});
-},{"./setting-section":27}],27:[function(require,module,exports){
-var ControlCollection = require('./control-collection')
-module.exports = Backbone.Model.extend({
-	defaults: {
-		name: 'settingSection',
-		title: 'Settings',
-		controls: [],
-		priority: 10
 	},
 
-	constructor: function( data, options ) {
+	setup: function() {
 
-    Backbone.Model.apply(this,arguments);
+		// Resend under specific channel
+		this.listenTo( cs.global, 'keybind', function( action ) {
+    	cs.keybind.trigger( action );
+  	});
 
-		this.controls = new ControlCollection( _.clone( this.get('controls') ) );
+    this.bindings = _.extend( cs.config('keybindings'), this.bindings );
 
-		this.controls.each( _.bind( function( control ) {
+    _.each(this.bindings,function( sequence, action ){
 
-			if ( control.get('name') == 'elements' ) {
-				var controlOptions = control.get('options');
-				if ( !controlOptions.type ) return;
+      var type = undefined;
+      var types = ['keypress', 'keyup', 'keydown' ];
 
-				var childType = controlOptions.type;
-				var collectionType = cs.collectionLookup( childType );
-				var elements = this.get('elements') || control.get('defaultValue') || [];
+      _.each( types, function(prefix) {
+        if ( sequence.indexOf( prefix + ':') == 0 ) {
+          type = prefix;
+          sequence = sequence.replace( prefix + ':', '' );
+        }
+      });
 
-		    _.each( elements, function(item) {
-		      if ( !item.elType ) item.elType = childType;
-		    } );
+      Cornerstone.Vendor.Mousetrap.bindGlobal( sequence, function() {
+        cs.global.trigger( 'keybind', action ); // send everywhere
+      }, type );
 
-		    var collection = new collectionType( elements, { childType: childType, parentEl: this } );
-		    this.set( 'elements', collection );
-
-		    return;
-			}
-
-      if ( _.isUndefined( this.get( control.get('name') ) ) ) {
-        this.set( control.get('name'), control.get('defaultValue') );
-      }
-
-    }, this ) );
-
-		this.unset( 'controls' );
-		this.controls.invoke( 'setProxy', this );
-	},
-
-	toJSON: function() {
-
-    var data = Backbone.Model.prototype.toJSON.apply( this, arguments );
-
-    var elements = this.get('elements');
-
-    if (elements)
-      data.elements = (elements.toJSON) ? elements.toJSON() : elements;
-
-    var omit = [ 'meta', 'rank', 'controls' ];
-    if (_.isEmpty(data.elements))
-      omit.push('elements');
-
-    return _.omit( data, omit );
-  }
-})
-},{"./control-collection":12}],28:[function(require,module,exports){
-// ElementCollection
-var ElementCollection = Backbone.Collection.extend({
-  model: require('./element'),
-
-  comparator: function( m ) {
-    return m.get('rank');
-  },
-
-  constructor: function( models, options ) {
-
-    this.childType = options.childType || null;
-    this.parentEl = options.parentEl || null;
-
-    this.on( 'update:position', this.updatePosition );
-    Backbone.Collection.apply( this, arguments );
-    this.on( 'add', this.pageDirty )
-    this.on( 'remove', this.pageDirty )
-    this.on( 'sort', this.pageDirty )
-
-  },
-
-  pageDirty: function() {
-    cs.data.trigger( 'page:updated', true );
-  },
-
-  updatePosition: function( model, newIndex ) {
-
-		this.remove(model);
-
-    // Items BEFORE keep their index,
-    // Items AFTER have their index incremented
-    this.each(function (model, index) {
-      var rank = index;
-      if (index >= newIndex)
-        rank += 1;
-      model.set('rank', rank);
     });
-
-    model.set('rank', newIndex);
-    this.add(model, {at: newIndex});
-    this.sort();
-
-    this.each(function(item){
-      item.trigger('position:updated');
-    })
-  },
-
-  create: function( atts, pos, markupCache, duplicate ) {
-
-    var options = {};
-    var duplicate = duplicate || false;
-
-    if (markupCache) {
-      options.markupCache = markupCache;
-    }
-
-    var rank = ( _.isFinite( pos ) ) ? pos : this.length;
-    var model = new this.model( _.extend( {
-      elType: this.childType
-    }, atts || {} ), options );
-
-    this.updatePosition( model, rank );
-    this.trigger( 'new:item', model, duplicate );
-    return model;
-  },
-
-  duplicate: function ( model ) {
-
-    var index = this.indexOf( model );
-    var clone = model.toJSON();
-
-    if ( clone.title )
-      clone.title = cs.l18n('sortable-duplicate').replace('%s', clone.title );
-
-    this.create( clone, index + 1, (model.markupCache) ? model.markupCache : false, true );
 
   }
 
 });
-
-ElementCollection.prototype.sync = function() { return null; };
-ElementCollection.prototype.fetch = function() { return null; };
-ElementCollection.prototype.save = function() { return null; };
-module.exports = ElementCollection;
-},{"./element":17}],29:[function(require,module,exports){
-var EditorView     = require('../views/main/editor')
-  , ElementLibrary = require('../data/models/element-stub-collection')
-  , Post = require('../data/models/post')
-  , BlockManager = require('../data/models/block-manager')
-  , SettingSectionCollection = require('../data/models/setting-section-collection')
-  , BlockCollection = require('../data/models/block-collection')
-  , ControlCollection = require('../data/models/control-collection')
-  , Options = require('../data/models/options')
-  , ajax = require('../utility/ajax.js');
-
-
-
-module.exports = Mn.Object.extend({
-
-  initialize: function() {
-
-    this.modules = {
-      Keybindings: new (require('./keybind'))
-    };
-
-    // Build Element Library
-    this.elementLibrary = new ElementLibrary( cs.config.request('elementLibraryStubs'), { sections: cs.config.request('elementLibrarySections') } );
-    cs.data.reply( 'get:elementLibrary', this.elementLibrary );
-
-    this.Options = new Options();
-    cs.data.reply( 'get:options', this.Options );
-
-    // Data Setup
-    this.post = new Post( cs.config.request( 'post' ) );
-
-    cs.data.reply( 'get:post', this.post );
-    cs.data.reply( 'post_id', this.post.get( 'post_id' ) );
-
-    this.loadSettings();
-
-    this.loadBlocks();
-
-    this.populateIcons();
-    cs.data.reply( 'get:icons', this.icons );
-
-    this.blockManager = new BlockManager();
-    cs.data.reply( 'block:manager', this.blockManager );
-
-    this.layoutControls = {
-      collection: new ControlCollection([], { proxy: this.post } ),
-      autoFocus: 'title'
-    }
-
-    this.layoutControls.collection.add({
-      name: 'actions',
-      controlType: 'element-info',
-      controlTitle: cs.l18n('layout-info-title'),
-      controlTooltip: cs.l18n('layout-info-description')
-    });
-
-    this.layoutControls.collection.add({
-      name: 'actions',
-      controlType: 'layout-actions',
-      divider: true
-    });
-
-    this.layoutControls.collection.add({
-      name: 'sections',
-      controlType: 'sortable-sections'
-    });
-
-    cs.data.reply( 'get:selected:layout', null );
-
-    this.selected = {
-      main: {
-        collection: new ControlCollection([]),
-        stub: null,
-      },
-      sub: {
-        collection: new ControlCollection([]),
-        stub: null,
-      }
-    }
-
-    cs.data.reply( 'get:inspector', this.selected.main );
-    cs.data.reply( 'get:layout:controls', this.layoutControls );
-    cs.data.reply( 'get:sub:inspector', this.selected.sub );
-
-    window.onbeforeunload = function(e) {
-      if ( cs.changed == true ) {
-        return cs.l18n('home-onbeforeunload');
-      }
-    };
-
-    // this.usePostMessage({
-    //   target: document.getElementById('preview-frame').contentWindow,
-    //   broadcastEvents: ['test1']
-    // });
-
-    // Event Delegation
-    this.listenTo(cs.channel,  'element:delete', this.elementDelete );
-    this.listenTo(cs.channel,  'column:erase', this.columnErase );
-
-    this.listenTo(cs.data,  'import:template', this.importTemplate );
-
-    this.listenTo(cs.channel,  'inspect:element', this.setInspectorSelectedElement );
-    this.listenTo(cs.channel,  'inspect:nothing', this.clearSelectedElement );
-    this.listenTo(cs.channel,  'inspect:sub:element', this.setInspectorSelectedSubElement );
-    cs.navigate.reply( 'inspector:heading', false );
-
-    this.listenTo(cs.navigate, 'inspector', this.navigateInspector );
-
-    cs.preview.on( 'refresh', function() {
-      var $frame = Backbone.$('#preview-frame');
-      $frame.attr('src', $frame.attr('src') );
-    } );
-
-    this.listenTo(cs.navigate, 'pane:switch', function() {
-      cs.extra.trigger( 'flyout', 'none' );
-    });
-
-    cs.extra.reply( 'get:collapse', false );
-    cs.data.reply( 'saved:last', null );
-    this.listenTo( cs.channel,  'action:save', this.save );
-    this.listenTo( cs.data,  'save:template', this.saveTemplate );
-    this.listenTo( cs.data,  'delete:template:remote', this.deleteTemplate );
-
-    // Defer View until Window.onLoad
-    Backbone.$(window).load(_.bind(this.loadView, this));
-    Backbone.$('#preview-frame').load(_.bind(this.loadIFrame, this))
-
-    this.listenTo( cs.channel, 'block:download', this.blockDownload );
-
-
-    this.listenTo( cs.navigate, 'layout:section', function( selected ) {
-      cs.data.reply( 'get:selected:layout', selected );
-      cs.navigate.trigger( 'pane', 'layout' );
-    });
-
-    this.listenTo( cs.navigate, 'pane', this.killObserver );
-    this.listenTo( cs.navigate, 'subpane:opened', this.killObserver );
-
-  },
-
-  loadSettings: function() {
-    var request = ajax.post( 'cs_setting_sections', {
-      data: {
-        post_id: cs.data.request('post_id'),
-      },
-      success: _.bind( function( response, options ) {
-
-        this.post.set( 'settings', new SettingSectionCollection( response ) );
-        cs.data.trigger('settings:ready');
-      }, this ),
-      error: function( response ) { cs.warn( response.message ); }
-    } );
-
-  },
-
-  loadBlocks: function() {
-    var request = ajax.post( 'cs_blocks', {
-      data: {
-        post_id: cs.data.request('post_id'),
-      },
-      success: _.bind( function( response, options ) {
-
-        this.blockManager.set('allblocks', new BlockCollection( response ) );
-        this.blockManager.setup();
-        cs.data.trigger('blocks:ready');
-
-      }, this ),
-      error: function( response ) { cs.warn( response.message ); }
-    } );
-
-  },
-
-  loadView: function() {
-
-    this.view = new EditorView({ el: '#editor' });
-    this.view.render();
-
-    // Ignore changes for a few seconds while we boot up.
-    _.delay( _.bind( function(){
-
-      this.stopListening( cs.data, 'page:updated' );
-      this.listenTo( cs.data, 'page:updated', function( state ) {
-        cs.changed = state;
-      });
-    }, this ), 2500 );
-
-  },
-
-  loadIFrame: function() {
-
-    cs.preview.off( 'remote' );
-    cs.preview.on( 'remote', function() {
-      document.getElementById("preview-frame").contentWindow.cs.preview.trigger( 'remote', arguments )
-    } );
-
-    cs.preview.trigger( 'remote', 'reload', this, cs );
-    //document.getElementById("preview-frame").contentWindow.cs.preview.trigger( 'reload', this.post )
-  },
-
-  rowCopy: function( options ) {
-
-    if ( !options.model )
-      return;
-
-    var update = {
-      title: cs.l18n('sortable-duplicate').replace('%s', options.model.get( 'title' ) )
-    };
-
-    this.rows.duplicate( options.model, update );
-
-  },
-
-  elementDelete: function( options ) {
-
-    if (options.model) {
-      options.model.destroy({
-        success: function() {
-          if (options.success)
-            _.defer( options.success );
-        }
-      });
-    }
-
-  },
-
-  columnErase: function ( options ) {
-
-    _.invoke( _.clone( options.model.get('elements').models ), 'destroy' );
-    //_.invoke( _.clone( selected.collection.models ), 'destroy' );
-    //options.model.get('elements').invoke('destroy');
-
-    if (options.success)
-      _.defer( options.success );
-
-  },
-
-  save: function() {
-    cs.channel.trigger( 'save' );
-    this.post.saveRemote();
-  },
-
-  saveTemplate: function( type, title ) {
-    cs.channel.trigger( 'saving:template' );
-    this.post.saveTemplate( type, title );
-  },
-
-  deleteTemplate: function( slug ) {
-    this.post.deleteTemplate( slug );
-  },
-
-  navigateInspector: function ( options ) {
-    if ( cs.extra.request( 'get:collapse' ) ) return;
-
-    if (options.model)
-      cs.channel.trigger( 'inspect:element', options );
-
-    cs.navigate.trigger( 'pane', 'inspector' );
-  },
-
-  // cs.channel.trigger( 'inspect:element', { model: this.model } );
-  setInspectorSelectedElement: function( options ) {
-    this.primeInspector( options );
-  },
-
-  setInspectorSelectedSubElement: function( options ) {
-    this.primeInspector( options, true );
-  },
-
-  clearSelectedElement: function() {
-    this.primeInspector( null );
-  },
-
-  primeInspector: function( options, sub ) {
-
-    if ( cs.extra.request( 'get:collapse' ) ) return;
-
-    var selected, element, elementName, actionType, helpText;
-
-    selected = ( sub === true ) ? this.selected.sub : this.selected.main;
-
-    if ( !options || !options.model ) {
-      cs.navigate.reply('inspector:heading', false );
-      cs.navigate.trigger('inspector:heading', false );
-
-      selected.collection.proxy = null;
-      selected.collection.reset();
-
-      return;
-    }
-
-    if ( selected.collection.hasProxyChanged( options.model ) ) {
-      selected.autoFocus = options.autoFocus || false;
-      return;
-    }
-
-    element = this.elementLibrary.findWhere( { name: options.model.get('elType') } );
-
-    if (!element) return;
-
-    // Set Model and element
-    selected.collection.setProxy( options.model ); // Element: Model being inspected
-    selected.stub = element; // ElementStub: Type of what's being inspected
-    selected.autoFocus = options.autoFocus || false;
-
-    cs.navigate.reply('inspector:heading', element.get('title') );
-    cs.navigate.trigger('inspector:heading', element.get('title') );
+},{}],7:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		/**
+     * Load Behaviors and set Mn lookup location
+     */
+    this.Behaviors = require('../../behaviors')
+    Cornerstone.Mn.Behaviors.behaviorsLookup = _.bind( function() { return this.Behaviors; }, this );
 
     /**
-     * Destroy all existing controls, then reset the collection from the new ones
-     * Finally, set the selected model as the proxy for each control
+     * Use Custom Template Renderer with Marionette
      */
-    _.invoke( _.clone( selected.collection.models ), 'destroy' );
-    selected.collection.reset( _.map( element.get('controls'), _.clone ) );
+    Cornerstone.Mn.Renderer = require('../../utility/renderer');
 
-    elementName = element.get('name')
+	},
 
-    if ( _.contains( cs.config.request('publicElementSections'), element.get('section') ) ) {
-      actionType = 'element-actions';
-    }
+});
+},{"../../behaviors":3,"../../utility/renderer":26}],8:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
 
-    if ( elementName == 'section' ) actionType = 'section-actions';
-    if ( elementName == 'row' )     actionType = 'row-actions';
-    if ( elementName == 'column' )  actionType = 'column-actions';
+	initialize: function() {
 
-    if (actionType) {
-      selected.collection.add( { controlType: actionType }, { at: 0 } );
-    }
+		// this.Models = { Base: require('../../data/models/element-base') };
+  //   _.extend( this.Models, require('../../data/models') );
 
+  //   this.Collections = { Base: require('../../data/models/sortable-collection') };
+  //   _.extend( this.Collections, require('../../data/models/collection-index') );
 
-    helpText = element.get('helpText');
+	},
 
-    if ( helpText && helpText.title && helpText.message) {
-      selected.collection.add( {
-        name: 'help-text',
-        controlType: 'element-info',
-        controlTitle: helpText.title,
-        controlTooltip: helpText.message
-      }, { at: 0 } );
-    }
-
-    if ( elementName != 'responsive-text' ) {
-      selected.collection.add( { controlType: 'breadcrumbs' }, { at: 0 } );
-    }
-
-
+	modelLookup: function ( id ) {
+    return this.Models[id] || this.Models.Base;
   },
 
-  populateIcons: function() {
+  collectionLookup: function ( id ) {
+    return this.Collections[id] || this.Collections.Base;
+  }
 
-    cs.config.request( 'fontAwesome' );
+});
+},{}],9:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		cs.data = Backbone.Radio.channel( 'cs:data' );
+
+		cs.render = this;
+		this.cache = {};
+		this.jobs = {};
+
+		var delay = parseInt( cs.config( 'remoteRenderDelay' ), 10 );
+		this.run = _.debounce( _.bind( this.run, this ), delay );
+
+		// If nothing is queued in a reasonable amount of time,
+		// consider the page primed
+		var noRender = setTimeout( _.bind( function() {
+			this.trigger( 'primed' );
+		}, this ), delay * 2 );
+
+		this.once( 'add', function() {
+			clearTimeout( noRender );
+		});
+
+	},
+
+	onQueue: function( model ) {
+
+		this.trigger( 'add', model );
+
+		if ( model.shadow ) {
+			if ( this.cache[model.shadow] ) this.cache[model.cid] = _.clone( this.cache[model.shadow] );
+			delete model.shadow;
+			return;
+		}
+
+		this.queue( model.cid, model.definition.get('flags')._v, model.toJSON(), function( response ){
+			this.cache[model.cid] = response;
+			model.trigger('remote:render');
+		});
+
+	},
+
+
+	getCache: function( model ) {
+		var cache = this.cache[model.cid];
+		if ( !cache ) {
+			this.triggerMethod( 'queue', model )
+			cache = cs.template( 'loading' );
+		}
+		return cache;
+	},
+
+	queue: function( id, provider, data, callback ) {
+		this.jobs[ id ] = { data: data, provider: provider, callback: callback };
+		this.run();
+	},
+
+	run: function( data ){
+
+		if (!data) {
+
+			var batch = _.map( this.jobs, function( value, key ) {
+				return { jobID: key, provider: value.provider, data: value.data || {} };
+			});
+
+			data = {
+				post_id: cs.post.get('post_id'),
+				batch: batch
+			};
+
+			if ( cs.raw_markup || ( top && top.cs && top.cs.raw_markup ) )
+				data['raw_markup'] = true;
+
+			this.registeredJobs = _.clone( this.jobs );
+			this.jobs = {};
+
+		}
+
+		var request = cs.ajax( 'cs_render_element', data, {
+
+			success: _.bind( function( response, options ) {
+
+				Cornerstone.serial( _.map( response.scripts, function(script, key){
+					return function( next ) {
+						cs.preview.trigger( 'late:enqueue', key, script.tag, script.src, next );
+					}
+				}, this ).concat( _.map( response.jobs, function( job, jobID) {
+					return _.bind( function( next ) {
+
+						var registeredJob = this.registeredJobs[ jobID ];
+						if ( job.markup.indexOf('%%TMPL%%') == 0 ) {
+							job.markup = job.markup.replace('%%TMPL%%','');
+							job.markup = _.template(job.markup);
+						}
+						if ( '' == job.markup ) {
+							job.markup = cs.template( 'empty-element' );
+						}
+
+						registeredJob.callback.call( this, job.markup );
+						delete this.registeredJobs[ jobID ];
+						next();
+					}, this );
+				}, this ) ) ).done( _.bind( function(message){
+
+					this.trigger( 'primed' );
+
+					if (message)
+						console.log( message );
+
+				}, this ) );
+
+			}, this ),
+			error: _.bind( function( response ) {
+				if (!this.retry) {
+					this.retry = true;
+					this.run( data );
+					console.warn( 'Could not reach render endpoint. Attempting fallback...' );
+				}
+				if (response.message == '0') {
+					cs.warn( 'Invalid render response. Check for PHP errors, or that the user is logged in.' );
+					return;
+				}
+				cs.warn( response.message );
+			}, this )
+		} );
+
+	},
+
+	isRunning: function() {
+		return _.keys( this.registeredJobs).length > 0;
+	}
+
+});
+},{}],10:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		/**
+     * Load Templates & Icons
+     */
+
+    this.cs.Templates = (this.cs.Config.isPreview == "true") ? require('../../../tmp/templates-elements.js') : require('../../../tmp/templates-builder.js');
+    this.cs.Icons = require('../../../tmp/templates-svg.js');
+
+    this.listenTo( cs.events, 'editor:init', this.populateIcons );
+
+	},
+
+	populateIcons: function() {
+		cs.config( 'fontAwesome' );
     var iconList = {}
 
     _.each( _.pairs(cs.Config.fontAwesome), function( item) {
@@ -1490,57 +390,870 @@ module.exports = Mn.Object.extend({
     } );
 
     this.icons = iconList;
-  },
+		cs.data.reply( 'get:icons', this.icons );
+	}
 
-  blockDownload: function( name ) {
+});
+},{"../../../tmp/templates-builder.js":110,"../../../tmp/templates-elements.js":111,"../../../tmp/templates-svg.js":112}],11:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
 
-    try {
-      !!new Blob;
-    } catch (e) {
-      cs.message.trigger( 'error', cs.l18n( 'browser-no-can') );
-      return;
-    }
+	initialize: function() {
+		this.listenTo( cs.events, 'editor:init', this.registerControlViews );
+		this.listenTo( cs.events, 'preview:init', this.registerElementViews );
+	},
 
-    var name = name || 'template';
+	registerElementViews: function() {
 
-    var elements = (this.post) ? this.post.get('elements') : null;
+    var base = require('../../views/elements/base');
 
-    var data = {
-      title: name,
-      elements: (elements) ? elements.toJSON() : [],
+    window.Cornerstone.ElementViews = {
+      Base: require('../../views/preview/base')
     };
 
-    var filename = name.replace(/\s+/g, '_');
+    _.extend( window.Cornerstone.ElementViews, require('../../views/preview') );
+    cs.events.trigger( 'register:element:views' );
 
-    var jsonData = JSON.stringify( data, null, 2);
-    FileSaver.saveAs( new Blob([jsonData], {type: "text/plain;charset=utf-8"}), filename + ".csl" );
+	},
 
-    // var downloadLink = document.createElement("a");
-    // downloadLink.setAttribute("href", 'data:text/json;charset=utf8,' + encodeURIComponent( jsonData ) );
-    // downloadLink.setAttribute("download", filename + ".csl" );
-    // document.body.appendChild(downloadLink);
-    // downloadLink.click();
-    // Backbone.$(downloadLink).on('click',function(){
-    //   $(this).remove();
-    // });
+	registerControlViews: function() {
 
+		window.Cornerstone.ControlViews = { Base: require('../../views/controls/base') };
+    _.extend( window.Cornerstone.ControlViews, require('../../views/controls') );
+    cs.events.trigger( 'register:control:views' );
+
+	},
+
+	elementLookup: function ( id ) {
+    return Cornerstone.ElementViews[id] || Cornerstone.ElementViews.Base;
   },
 
-  getTemplateSections: function( name ) {
-    var template = this.blockManager.get('allblocks').findWhere( { slug: name } );
-    if (template) {
-      return template.get('elements');
+});
+},{"../../views/controls":43,"../../views/controls/base":30,"../../views/elements/base":70,"../../views/preview":100,"../../views/preview/base":94}],12:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function( options ) {
+
+		cs.global = Backbone.Radio.channel( 'cs:remote' );
+		this.listenToOnce( cs.global, 'preview:primed', this.primed );
+
+		this.listenTo( cs.global, 'ajax:fallback', function( state ) {
+			cs.fallbackAjax = state;
+		} );
+
+
+    // Defer views until window and iFrame are loaded.
+    Backbone.$(window).load(_.bind(this.loadView, this));
+    Backbone.$('#preview-frame').load(_.bind(this.loadIFrame, this))
+
+		cs.events.trigger( 'editor:init' );
+
+	},
+
+	primed: function() {
+
+		this.clearPreloader();
+
+		require('../../utility/custom-media-manager');
+
+		cs.global.reply( 'editor:ready', true );
+		cs.global.trigger( 'editor:ready' );
+
+
+	},
+
+	loadView: function() {
+		var EditorView = require('../../views/main/editor');
+    this.view = new EditorView({ el: '#editor' });
+    this.view.render();
+  },
+
+  loadIFrame: function() {
+
+  	var frameWindow = document.getElementById("preview-frame").contentWindow;
+
+  	if ( frameWindow.cs && frameWindow.cs.preview ) {
+  		frameWindow.cs.preview.trigger( 'iframe:ready', this, cs );
+  		return;
+  	}
+
+  	_.defer(function(){
+  		cs.global.trigger( 'preview:primed' );
+  		cs.message.trigger( 'error', cs.l18n( 'preview-failure') );
+  	});
+
+	},
+
+	clearPreloader: function() {
+
+  	$preloader = Backbone.$('#preloader').addClass('cs-preloader-fade').one( 'transitionend', function() {
+    	$preloader.remove();
+    });
+
+  	// Fallback when 'transitionend' isn't available
+    _.delay( function(){
+    	if ( $preloader )
+      	$preloader.remove();
+    }, 2000 );
+
+  }
+
+});
+},{"../../utility/custom-media-manager":24,"../../views/main/editor":87}],13:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		this.inspect = {
+			primary: new Cornerstone.InspectionSupervisor(),
+			secondary: new Cornerstone.InspectionSupervisor(),
+			expansion: new Cornerstone.InspectionSupervisor(),
+		};
+
+		this.clearElement();
+		this.clearChildElement();
+
+		this.listenTo( cs.events, 'inspect:element', this.inspectElement );
+		this.listenTo( cs.events, 'inspect:child:element', this.inspectChildElement );
+		this.listenTo( cs.events, 'inspect:clear', this.clearElement );
+		this.listenTo( cs.events, 'inspect:child:clear', this.clearChildElement );
+
+		this.listenTo( cs.events, 'expand:control', this.expansionSource );
+		this.listenTo( cs.events, 'expand:close', this.expansionClose );
+
+		cs.navigate.reply( 'inspector:heading', cs.l18n('inspector-heading') )
+
+	},
+
+	inspectElement: function( model ) {
+		this.updateInspector( 'primary', model );
+		cs.global.trigger( 'autoscroll', model.cid );
+	},
+
+	inspectChildElement: function( model ) {
+		this.updateInspector( 'secondary', model );
+	},
+
+	clearElement: function() {
+		this.clearChildElement();
+		this.resetInspector( 'primary' );
+	},
+
+	clearChildElement: function() {
+		this.resetInspector( 'secondary' );
+	},
+
+	resetInspector:function( mode ) {
+
+		this.updateInspector( mode, new Cornerstone.Models.Proxyable(), [], [] );
+
+		if ( mode == 'primary' )
+			this.setHeading( false );
+
+	},
+
+	expansionSource: function( source, name ) {
+
+		this.updateInspector( 'expansion', source, _.filter( source.definition.getControls(), function( control ){
+			return ( name == control.name );
+		} ) );
+
+	},
+
+	expansionClose: function() {
+		this.inspect.expansion.reset();
+	},
+
+	updateInspector: function( level, source, controls, metaControls ) {
+
+		if (!this.inspect[level]) return;
+
+
+		this.listenToOnce( source, 'column:change', _.bind( function( newSource ) {
+			this.updateInspector( level, newSource );
+		}, this ) );
+
+		if ( !controls )
+			controls = source.definition.getControls();
+
+		if ( !metaControls )
+			metaControls = this.getMetaControls( level, source );
+
+
+		this.inspect[level].source( {
+			name: 'meta',
+			source: source,
+			controls: metaControls
+		} );
+
+
+		this.inspect[level].source( {
+			name: 'element',
+			source: source,
+			controls: controls
+		} );
+
+		this.inspect[level].rebuildControls();
+
+		if ( level == 'primary' && source.definition ) {
+			this.setHeading( source.definition.get('ui').title );
+		}
+
+	},
+
+	getMetaControls: function( level, source) {
+
+		var controls = [];
+
+		var ui = source.definition.get('ui');
+		var name = source.definition.get('name');
+		var internal = ( source.definition.get('flags').context == '_internal' );
+
+		if ( level == 'primary' ) {
+
+			controls.push({ type: 'breadcrumbs' })
+
+			if ( ui.helpText ) {
+				controls.push( {
+					type: 'info-box',
+					ui: {
+						title: ui.helpText.title || '',
+						message: ui.helpText.message || ''
+					}
+				} );
+			}
+
+			if ( !internal ) {
+				var actionType = ( _.contains( [ 'section', 'row', 'column' ], name ) ) ? name : 'element';
+				controls.push( { type: actionType + '-actions' } );
+			}
+
+		}
+
+		if ( level == 'secondary' ) {
+
+		}
+
+		return controls;
+	},
+
+	setHeading: function( heading ) {
+
+		if ( !heading )
+			heading = cs.l18n('inspector-heading')
+
+		cs.navigate.reply( 'inspector:heading', heading )
+		cs.navigate.trigger( 'refresh:inspector:heading' );
+
+	},
+
+	getPrimaryControls: function() {
+		return this.inspect.primary.controls;
+	},
+
+	getSecondaryControls: function() {
+		return this.inspect.secondary.controls;
+	},
+
+	getExpansionControls: function() {
+		return this.inspect.expansion.controls;
+	}
+
+});
+},{}],14:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+	},
+
+});
+},{}],15:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	nativeSections: [ 'themeco-pages', 'themeco-blocks' ],
+	userSections: [ 'user-pages', 'user-blocks' ],
+
+	initialize: function() {
+
+		this.data = new Backbone.Model({
+			title: cs.l18n( 'templates-title' )
+		});
+
+		this.controls = new Cornerstone.Collections.Control();
+    this.listenTo( cs.templates, 'ready', this.setup );
+    this.listenTo( cs.templates, 'add', this.setup );
+    this.listenTo( cs.templates, 'remove', this.setup );
+
+	},
+
+	setup: function() {
+
+		var controls = new Cornerstone.Collections.Control();
+
+    controls.add({
+      name: 'info',
+      type: 'info-box',
+      ui: {
+      	title: cs.l18n('templates-info-title'),
+      	message: cs.l18n('templates-info-description')
+      }
+    });
+
+
+    controls.add({
+      name: 'action',
+      type: 'template-actions',
+      ui: {
+      	divider: true
+      }
+    });
+
+    controls.add({
+      name: 'title',
+      type: 'template-save-dialog',
+      condition: { 'action': 'save' }
+    });
+
+    controls.add({
+      name: 'uploader',
+      type: 'template-upload-dialog',
+      condition: { 'action': 'upload' }
+    });
+
+    var name, choices, type, userTemplates, templateManager;
+
+    templateManager = cs.component('template-manager');
+    userTemplates = [];
+
+		_.each( _.union( this.nativeSections, this.userSections ), function( section_name ) {
+
+			var section = templateManager.templates.section( section_name );
+
+			choices = section.map( _.bind( function(item){
+				if ( _.contains( this.userSections, section_name ) )
+					userTemplates.push(item);
+        return { value: item.get('slug'), label: item.get('title') };
+      }, this ) );
+
+			type = ( section_name.indexOf('page') > -1 ) ? 'page' : 'block';
+
+			controls.add({
+        name: section_name,
+        type: 'template-select',
+        ui: {
+        	title: cs.l18n( 'templates-' + section_name ),
+        	buttonText: cs.l18n('templates-insert'),
+        	divider: ( type == 'block' ),
+        	compact: ( type == 'block' ),
+        },
+        options: {
+          choices: choices,
+          templateType: type,
+        },
+
+      });
+
+
+		}, this );
+
+
+    choices = userTemplates.map(function(item){
+      var format = ( item.get('type') == 'block' ) ? cs.l18n('templates-remove-block') : cs.l18n('templates-remove-page');
+      return { value: item.get('slug'), label: format.replace('%s', item.get('title') ) };
+    });
+
+    controls.add({
+      name: 'user-removals',
+      type: 'template-remove',
+      ui: {
+      	title: cs.l18n('templates-remove-label'),
+      	buttonText: cs.l18n('templates-remove'),
+      },
+      options: {
+        choices: choices,
+        templateType: 'remove'
+      }
+    });
+
+    controls.invoke( 'setProxy', this.data );
+
+    var oldControls = this.controls
+
+    this.controls = controls;
+    cs.templates.trigger( 'control:reset' );
+
+    oldControls.reset();
+  }
+
+});
+},{}],16:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		this.inspect = {};
+
+		this.inspect.primary = new Cornerstone.InspectionSupervisor( [ {
+			name: 'primary',
+			source: new Cornerstone.Models.Proxyable(),
+			controls: [ {
+				name: 'help_text',
+				key: 'disabled',
+				type: 'info-box',
+				ui: {
+					title: cs.l18n('layout-info-title'),
+					message: cs.l18n('layout-info-description')
+				}
+			}, {
+				name: 'layout_actions',
+				key: 'disabled',
+				type: 'layout-actions',
+				options: {
+					divider: true
+				}
+			} ]
+		}, {
+			name: 'section',
+			source: cs.post.data,
+			controls: [ {
+				name: 'sections',
+				key: 'elements',
+				type: 'sortable-sections'
+			}]
+		} ] );
+
+
+  	this.inspect.secondary = new Cornerstone.InspectionSupervisor( [ {
+			name: 'section',
+			source: new Cornerstone.Models.Proxyable(),
+			controls: []
+		}, {
+			name: 'row',
+			source: new Cornerstone.Models.Proxyable(),
+			controls: []
+		} ] );
+
+		cs.navigate.reply( 'layout:active:row', false );
+		this.listenTo( cs.events, 'inspect:layout:section', this.inspectSection );
+		this.listenTo( cs.events, 'inspect:layout:row', this.inspectRow );
+
+		this.listenTo( cs.events, 'add:section', function() {
+			cs.elements.trigger( 'add:item', 'section', cs.post.data, cs.l18n('section-numeric') );
+		});
+
+	},
+
+
+	inspectSection: function( section, activeRow ) {
+
+		if ( !section ) return;
+		if ( !activeRow ) activeRow = section.elements.first();
+
+		cs.global.trigger( 'autoscroll', activeRow.cid );
+
+		cs.navigate.reply( 'layout:active:row', activeRow );
+
+		this.inspect.secondary.source( {
+			name: 'section',
+			source: section,
+			controls: section.definition.getControls( '_layout' )
+		} );
+
+		this.inspect.secondary.source( {
+			name: 'row',
+			source: activeRow,
+			controls: activeRow.definition.getControls( '_layout' )
+		} );
+
+		this.inspect.secondary.rebuildControls();
+
+	},
+
+	inspectRow: function( row ) {
+		if ( !row ) return;
+		this.inspectSection( row.collection.parent, row );
+	}
+
+});
+},{}],17:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	panes: {
+		layout: [ 'rows', 'templates'],
+		elements: [],
+		inspector: [ 'item' ],
+		settings: [ 'item']
+	},
+
+	initialize: function() {
+
+		cs.navigate = Backbone.Radio.channel( 'cs:navigate' );
+
+		cs.navigate.reply( 'auto:focus', false );
+
+		this.listenTo( cs.navigate, 'pane', this.killObserver );
+		this.listenTo( cs.navigate, 'subpane:opened', this.killObserver );
+
+		this.listenTo(cs.navigate, 'pane:switch', function() {
+			cs.extra.trigger( 'flyout', 'none' );
+		});
+
+		this.listenTo(  cs.global, 'auto:focus', _.debounce( function( key ){
+			console.log('FOCUS',key);
+			cs.navigate.reply( 'auto:focus', key );
+			cs.navigate.trigger( 'auto:focus', key );
+		},10, true ) );
+
+    this.listenTo(  cs.global, 'inspect', function( model ){
+			cs.events.trigger( 'inspect:element', model );
+			cs.navigate.trigger( 'inspector:home' );
+			cs.confirm.trigger( 'abort' );
+    });
+
+		cs.extra.reply( 'get:collapse', false );
+
+
+    // Propogate navigation shortcuts
+		_.each( this.panes, function( subs, pane ) {
+
+			this.listenTo( cs.navigate, pane + ':home', function( selected ) {
+				if ( cs.extra.request( 'get:collapse' ) ) return;
+				cs.navigate.trigger( 'pane', pane );
+			});
+
+			_.each( subs, function( sub ){
+				this.listenTo( cs.navigate, pane + ':' + sub, function( selected ) {
+					if ( cs.extra.request( 'get:collapse' ) ) return;
+					cs.navigate.trigger( 'pane', pane, sub );
+				});
+			}, this );
+
+		}, this );
+
+		this.listenTo( cs.global, 'nav:kylelements', function(){
+			cs.navigate.trigger( 'elements:home' );
+		});
+
+	},
+
+	killObserver: function() {
+		 cs.global.trigger( 'kill:observer' );
+	}
+
+});
+},{}],18:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		cs.options = Backbone.Radio.channel( 'cs:options' );
+
+		var editor_position = localStorage['cs_options_editor_position'];
+		var default_position = ( cs.config('isRTL') == 'true' ) ? 'right' : 'left';
+
+		this.data = new Cornerstone.Models.Proxyable( {
+			show_help_text: (localStorage['cs_options_show_help_text'] == 'true' ),
+			editor_position: (editor_position) ? editor_position : default_position
+		} );
+
+		_.each( _.keys( this.data.attributes ), _.bind( function( key ) {
+
+			this.on('change:' + key, function( model, value ) {
+				if ( _.isBoolean( value) )
+					value = (value) ? 'true' : 'false';
+				localStorage['cs_options_' + key ] = value;
+			});
+
+		}, this.data ) );
+
+		this.listenTo( this.data, 'change:show_help_text', this.updateHelpText );
+		this.listenTo( this.data, 'change:editor_position', this.updateEditorPosition );
+
+		cs.data.reply( 'get:options', this.data );
+		cs.options.reply( 'help:text', this.data.get('show_help_text') );
+		cs.options.reply( 'editor:position', this.data.get('editor_position') );
+
+		// Always show from now on
+		cs.options.reply( 'adv:controls', true );
+
+		this.inspect = new Cornerstone.InspectionSupervisor( {
+			name: 'options',
+			source: this.data,
+			controls: [ {
+				name: 'show_help_text',
+				type: 'toggle',
+				ui: {
+					title: cs.l18n('options-help-text'),
+					message: cs.l18n('options-help-text-sub')
+				},
+				options: { helpText: false }
+			},
+			// {
+			// 	name: 'editor_position',
+			// 	type: 'choose',
+			// 	ui: {
+			// 		title: cs.l18n('options-editor-position'),
+			// 		message: cs.l18n('options-editor-position-sub')
+			// 	},
+			// 	options: {
+			// 		choices: [
+			// 			{ value: 'left', 'tooltip': cs.l18n('options-editor-position-left'), icon: cs.fontIcon( 'arrow-left' ) },
+			// 			{ value: 'right', 'tooltip': cs.l18n('options-editor-position-right'), icon: cs.fontIcon( 'arrow-right' ) },
+			// 		],
+			// 		helpText: false
+			// 	},
+			// }
+			]
+		});
+
+		this.inspect.controls.each(function(model){
+			model.optionExempt = true;
+		});
+
+	},
+
+	updateEditorPosition: function( model, value) {
+		cs.options.reply( 'editor:position', value );
+		cs.options.trigger( 'editor:position', value );
+		cs.options.trigger( 'changed', 'editor_position' );
+	},
+
+	updateHelpText: function( model, value ) {
+		cs.options.reply( 'help:text', value );
+		cs.options.trigger( 'help:text', value );
+		cs.options.trigger( 'changed', 'show_help_text' );
+	},
+
+	getModel: function() {
+		return this.data;
+	}
+
+});
+},{}],19:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		this.cs.post = new Cornerstone.Post( cs.config( 'post' ) );
+		this.listenTo( cs.events, 'action:save', this.save );
+		this.listenTo( cs.data, 'save:success', this.saveSuccess );
+		this.listenTo( cs.data, 'save:error', this.saveError );
+
+		if ( cs.global.request( 'editor:ready' ) ) {
+			this.trackChanges();
+		} else {
+			this.listenTo( cs.global, 'editor:ready', this.trackChanges );
+		}
+
+
+    cs.data.reply( 'saved:last', null );
+
+		// Warn before closing browser window
+		window.onbeforeunload = function(e) {
+      if ( cs.changed == true ) {
+        return cs.l18n('home-onbeforeunload');
+      }
+    };
+
+	},
+
+	saveSuccess: function() {
+
+		cs.data.reply('saved:last', Cornerstone.Vendor.moment() );
+		cs.channel.trigger('update:saved:last');
+		cs.changed = false;
+
+		if ( cs.navigate.request( 'active:pane' ) == 'settings' ) {
+      localStorage['CornerstonePane'] = 'settings';
+      location.reload();
+      //cs.events.trigger('refresh:preview');
     }
-    return [];
+
+	},
+
+	save: function() {
+
+		cs.data.trigger( 'save' );
+
+		Cornerstone.Vendor.NProgress.configure({ showSpinner: false, speed: 850, minimum: 0.925 });
+    Cornerstone.Vendor.NProgress.start();
+
+		cs.ajax( 'cs_endpoint_save', _.omit( this.cs.post.toJSON(), [ '_type' ] ), {
+      success: function( response ) {
+        cs.data.trigger( 'save:success', response );
+      },
+      error: function( response ) {
+      	cs.data.trigger( 'save:error', response );
+      },
+      always: function( response ) {
+      	cs.log(response);
+      	cs.data.trigger( 'save:response', response );
+      	Cornerstone.Vendor.NProgress.done();
+      }
+    } );
+
+	},
+
+	trackChanges: function() {
+		// Ignore changes for a few seconds while we boot up.
+    this.stopListening( cs.channel, 'page:unsaved' );
+    _.delay( _.bind( function(){
+      this.listenTo( cs.channel, 'page:unsaved', function() {
+        cs.changed = true;
+      });
+    }, this ), 5000 );
+	}
+
+});
+},{}],20:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+		cs.data.reply( 'settings:ready', false );
+
+		this.listenTo( cs.data, 'save', this.save );
+
+		this.listenTo( cs.global, 'editor:ready', this.fetchSections );
+		this.listenTo( cs.global, 'settings:pingback', this.setupListeners );
+
+	},
+
+	save: function() {
+		if ( true == cs.data.request( 'settings:ready' ) )
+			this.cs.post.set( 'settings', this.getSettingData() );
+	},
+
+	fetchSections: function() {
+
+    cs.ajax( 'cs_setting_sections', {
+    	post_id: this.cs.post.get('post_id')
+    }, {
+      success: _.bind( this.loadSettings, this ),
+      error: function( response ) { cs.warn( response.message ); }
+    } );
+
   },
 
-  importTemplate: function( sections, format ) {
+  loadSettings: function( response ) {
 
+  	this.inspect = new Cornerstone.InspectionSupervisor( {
+			name: 'primary',
+			source: new Cornerstone.Models.Proxyable(),
+			controls: [ {
+				name: 'settings-actions',
+				key: 'disabled',
+				type: 'settings-actions',
+			} ]
+	  } );
+
+  	this.cs.settingSections = new Backbone.Collection( response.models );
+  	this.settings = new Cornerstone.Collections.Setting( response.data );
+
+  	this.settings.each( function( setting ) {
+
+  		setting.inspect = new Cornerstone.InspectionSupervisor( {
+				name: 'primary',
+				source: setting,
+				controls: setting.section.get('controls')
+	  	} );
+
+  	} );
+
+		cs.data.reply( 'settings:ready', true );
+  	cs.global.trigger( 'settings:ready' );
+
+  },
+
+  getSettings: function() {
+  	return this.settings;
+  },
+
+  getSettingData: function() {
+  	this.settings.invoke( 'updateChildData' );
+  	return this.settings.toJSON();
+  },
+
+  getPrimaryControls: function() {
+  	return this.inspect.controls;
+  },
+
+  setupListeners: function() {
+
+  	var model = this.settings.findWhere({ _section: 'general'});
+
+    if ( model ) {
+    	this.listenTo( model, 'change:custom_css', function( model, value ) {
+      	cs.global.trigger( 'update:custom_css', value );
+    	});
+    	cs.global.trigger( 'update:custom_css', model.get('custom_css') );
+    } else {
+    	console.warn( 'Unable to load Custom CSS because Cornerstone settings are corrupted. ' );
+    }
+
+    model = this.settings.findWhere({ _section: 'responsive-text'});
+
+    if ( model ) {
+
+    	var update = _.debounce( function() {
+
+      	cs.global.trigger( 'update:responsive_text', _.map( model.elements.toProxy().toJSON(), function( item ) {
+        	return _.pick(item, 'selector', 'compression', 'min_size', 'max_size' );
+      	}) );
+
+    	}, 5 );
+
+    	this.listenTo( model.elements, 'model:change', update );
+    	this.listenTo( model.elements, 'add', update );
+    	this.listenTo( model.elements, 'remove', update );
+    	update();
+
+    } else {
+    	console.warn( 'Unable to load Responsive Text because Cornerstone settings are corrupted. ' );
+    }
+
+  },
+
+
+});
+},{}],21:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
+		cs.templates = Backbone.Radio.channel( 'cs:templates' );
+
+		this.templates = new Cornerstone.Collections.Template();
+		this.selections = new Backbone.Collection();
+
+		this.listenToOnce(  cs.global, 'preview:primed', this.requestTemplates );
+		this.on( 'templates:recieved', this.loadTemplates );
+
+    this.listenTo( cs.templates, 'import', this.importTemplate );
+    this.listenTo( cs.templates, 'save', this.save );
+    this.listenTo( cs.templates, 'delete', this.deletion );
+    this.listenTo( cs.templates, 'download', this.blockDownload );
+
+	},
+
+	requestTemplates: function() {
+    cs.ajax( 'cs_templates', {}, {
+      success: _.bind( function( response, options ) {
+        this.templates.add( response );
+  			cs.templates.trigger( 'ready', this );
+      }, this ),
+      error: function( response ) { cs.warn( response.message ); }
+    } );
+  },
+
+	importTemplate: function( sections, format ) {
+
+		// Convert slug to elements
     if ( typeof sections == 'string' ) {
-      sections = this.getTemplateSections( sections );
+	    var template = this.templates.findWhere( { slug: sections } );
+	    sections = (template) ? template.get('elements') : [];
     }
 
-    var elements = this.post.get('elements');
+    var elements = cs.post.elements();
 
     if ( format == 'page' )
       elements.reset();
@@ -1565,6 +1278,7 @@ module.exports = Mn.Object.extend({
     cs.message.trigger( 'success', (format == 'page') ? cs.l18n( 'templates-page-updated') : cs.l18n( 'templates-block-inserted') );
   },
 
+
   convertLegacy: function( sections ) {
 
     var moved = [ 'bg_type','bg_color','bg_image','bg_pattern_toggle','parallax','bg_video','bg_video_poster','margin','padding','border_style','border_color','visibility','class','style' ];
@@ -1581,230 +1295,226 @@ module.exports = Mn.Object.extend({
     } );
   },
 
-  clearPreloader: function() {
+	save: function( type, title ) {
 
-    Backbone.$(function(){
+		var data = _.extend( _.pick( cs.post.toJSON(), [ 'elements' ] ), {
+      type: type || 'block',
+      title: title || 'Untitled'
+    } );
 
-      $preloader = Backbone.$('#preloader');
-      $preloader.detach();
-      Backbone.$('body').prepend($preloader);
-
-      Backbone.$(window).load(function(){
-        $preloader.addClass('cs-preloader-fade');
-        _.delay( function(){
-          $preloader.remove();
-        }, 3000 )
-      });
-
-    });
+    cs.ajax( 'cs_save_template', data , {
+      success: _.bind( function( response ) {
+        this.templates.add( response.template );
+        cs.templates.trigger( 'add', this );
+        cs.message.trigger( 'success', cs.l18n( 'templates-saved' ), 4000 );
+      }, this ),
+      error: function( response ) {
+        cs.message.trigger( 'error', cs.l18n( 'templates-error-save' ), 10000 );
+      },
+      always: function( response ) {
+      	cs.log(response);
+      }
+    } );
   },
 
-  killObserver: function() {
-    cs.preview.trigger( 'remote', 'kill:observer' );
-  }
+  deletion: function( slug ) {
 
-});
-},{"../data/models/block-collection":6,"../data/models/block-manager":7,"../data/models/control-collection":12,"../data/models/element-stub-collection":15,"../data/models/options":19,"../data/models/post":20,"../data/models/setting-section-collection":26,"../utility/ajax.js":32,"../views/main/editor":126,"./keybind":30}],30:[function(require,module,exports){
-module.exports = Mn.Object.extend({
+  	var model = this.templates.findWhere( { slug: slug } )
+  	if ( !model ) return;
 
-  bindings: {
-    'ark': 'up up down down left right left right b a enter'
+  	model.destroy();
+    this.deleteRemote( slug );
+    cs.templates.trigger( 'remove', this );
+
   },
 
-  initialize: function(options){
+  deleteRemote: function( slug ) {
+  	cs.ajax( 'cs_delete_template', {
+      slug: slug
+    }, {
+      success: function( response ) {
+        cs.message.trigger( 'success', cs.l18n( 'templates-delete-success' ), 4000 );
+      },
+      error: function( response ) {
+        cs.message.trigger( 'error', cs.l18n( 'templates-error-delete' ), 10000 );
+      },
+      always: function( response ) {
+      	cs.log(response);
+      }
+    } );
+  },
 
-    this.addBindings();
+	blockDownload: function( name ) {
 
-    if ( options && options.preview ) {
-
-      this.listenTo( cs.preview, 'propogate:keybinding:upstream', function( action ) {
-        cs.keybind.trigger( action );
-      });
-
-      this.listenTo(cs.preview, 'reload', function( editor, builder ) {
-
-        this.listenTo( cs.keybind, 'propogate:keybinding', function( action ) {
-          builder.keybind.trigger( action );
-        });
-
-      });
-
-    } else {
-
-      this.listenTo( cs.keybind, 'propogate:keybinding', function( action ) {
-        cs.preview.trigger( 'remote', 'propogate:keybinding:upstream', action );
-      });
-
+    try {
+      !!new Blob;
+    } catch (e) {
+      cs.message.trigger( 'error', cs.l18n( 'browser-no-can') );
+      return;
     }
 
-  },
+    var name = name || 'template';
 
-  addBindings: function() {
+    var data = {
+      title: name,
+      elements: cs.post.toJSON().elements,
+    };
 
-    this.bindings = _.extend( cs.config.request('keybindings'), this.bindings );
+    var filename = name.replace(/\s+/g, '_');
 
-    _.each(this.bindings,function( sequence, action ){
-
-      var type = undefined;
-      var types = ['keypress', 'keyup', 'keydown' ];
-
-      _.each( types, function(prefix) {
-        if ( sequence.indexOf( prefix + ':') == 0 ) {
-          type = prefix;
-          sequence = sequence.replace( prefix + ':', '' );
-        }
-      });
-
-      Mousetrap.bindGlobal( sequence, function() {
-        cs.keybind.trigger( action );
-        cs.keybind.trigger( 'propogate:keybinding', action );
-      }, type );
-
-    });
+    var jsonData = JSON.stringify( data, null, 2);
+    Cornerstone.Vendor.FileSaver.saveAs( new Blob([jsonData], {type: "text/plain;charset=utf-8"}), filename + ".csl" );
 
   }
 
 });
-},{}],31:[function(require,module,exports){
-var PreviewView = require('../views/main/preview.js');
-module.exports = Mn.Object.extend({
+},{}],22:[function(require,module,exports){
+module.exports = {
 
-  initialize: function() {
+	// Common
+	'builder'         : require('./common/builder'),
+	'mn-extensions'   : require('./common/mn-extensions'),
+	'template-loader' : require('./common/template-loader'),
+	'view-loader'     : require('./common/view-loader'),
+	'model-loader'    : require('./common/model-loader'),
+	'render-queue'    : require('./common/render-queue'),
+	'keybindings'     : require('./common/keybindings'),
 
-    this.modules = {
-      Keybindings: new (require('./keybind'))( { preview: true } )
-    };
+	// Editor
+	'editor'           : require('./editor/editor'),
+	'navigator'        : require('./editor/navigator'),
+	'options'          : require('./editor/options'),
+	'layout'           : require('./editor/layout'),
+	'layout-section'   : require('./editor/layout-section'),
+	'layout-templates' : require('./editor/layout-templates'),
+	'inspector'        : require('./editor/inspector'),
+	'post-handler'     : require('./editor/post-handler'),
+	'settings'         : require('./editor/settings'),
+	'template-manager' : require('./editor/template-manager'),
 
-    cs.$indicator = Backbone.$('<div class="cs-indicator"></div>');
+	// Preview
+	'preview' : require('./preview/preview'),
+}
+},{"./common/builder":5,"./common/keybindings":6,"./common/mn-extensions":7,"./common/model-loader":8,"./common/render-queue":9,"./common/template-loader":10,"./common/view-loader":11,"./editor/editor":12,"./editor/inspector":13,"./editor/layout":16,"./editor/layout-section":14,"./editor/layout-templates":15,"./editor/navigator":17,"./editor/options":18,"./editor/post-handler":19,"./editor/settings":20,"./editor/template-manager":21,"./preview/preview":23}],23:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
 
-    cs.preview.on('incoming:element', function() {
-      cs.$indicator.removeAttr('style');
-    });
+	initialize: function( options ) {
 
-    cs.preview.on('remote', function(args) {
-      cs.preview.trigger.apply( this, args );
-    });
+		Backbone.$( document ).ready(function() {
+			Backbone.$('#cornerstone-preview-entry').empty();
+		});
 
-    this.listenTo(cs.preview, 'reload', function( editor ) {
+		cs.preview  = Backbone.Radio.channel( 'cs:preview' );
+		cs.observer = Backbone.Radio.channel( 'cs:observer' );
 
-      this.post = editor.post;
-      cs.data.reply( 'get:post', this.post );
+		xData.isPreview = true;
 
-      Backbone.$('#cornerstone-preview-entry').empty();
-      this.view = new PreviewView( { el: '#cornerstone-preview-entry', collection: this.post.get('elements') } )
-      this.view.render();
-
-
-      var loadSettings = function(){
-        var settings = this.post.get('settings');
-        if (settings) {
-          this.customCSS();
-          this.responsiveText();
-          clearInterval( this.loadSettingsTimer );
-        }
-      }
-
-      this.loadSettingsTimer = setInterval(_.bind( loadSettings, this ), 1000 );
-      loadSettings.call(this);
-
-    });
+		// Hook before preview initializes
+    this.listenTo(cs.preview, 'iframe:ready', this.reload );
 
     cs.observer.reply( 'get:collapse', false );
     this.listenTo( cs.preview, 'set:collapse', function( state ) {
 			cs.observer.reply( 'get:collapse', state );
 		} );
-  },
 
-  customCSS: function() {
-    var model = this.post.get('settings').findWhere({ name: 'general'});
-    if (!model) return;
-    model.on('change:custom_css',function( model, value ) {
-      Backbone.$('#cornerstone-custom-page-css').html( value );
-    })
-  },
+    //window.onbeforeunload = _.bind( this.cleanUp, this );
 
-  responsiveText: function() {
-    var model = this.post.get('settings').findWhere({ name: 'responsive-text'});
+    // Hook after initialization. This does not gaurantee preview window is
+    // accessible. You should probably use 'preview:reloaded' instead.
+		cs.events.trigger( 'preview:init' );
 
-    if (!model) return;
+		cs.preview.reply( 'responsive:text', null );
 
-    var collection = model.get('elements')
-    var reply = function(){
-      var config = _.map( collection.toJSON(), function(item) {
-        return _.pick(item, 'selector', 'compression', 'min_size', 'max_size' );
-      });
-      cs.preview.reply( 'responsive:text', config );
-      cs.preview.trigger( 'responsive:text', 'reset' );
+		this.listenTo( cs.preview, 'responsive:text', this.responsiveTextUpdate );
+		this.listenTo( cs.preview, 'late:enqueue', this.lateEnqueue );
+
+	},
+
+
+	reload: function( editor ) {
+
+    cs.global = editor. cs.global;
+    this.cs.post = editor.cs.post;
+
+    if ( Backbone.$('#cornerstone-preview-entry').length == 0 ) {
+			console.log( 'Unable to initialize preview.' );
     }
-    reply();
-    collection.on( 'change', reply );
-    collection.on( 'remove', reply );
 
-    this.listenTo( cs.preview, 'responsive:text',function( scope ) {
+    var PreviewView = require('../../views/main/preview.js');
+    this.view = new PreviewView( { el: '#cornerstone-preview-entry', model: this.cs.post.data } )
+		this.view.render();
 
-      var scope = scope || Backbone;
-
-      if (scope == 'reset') {
-        Backbone.$(window).trigger('fittextReset');
-        scope = Backbone;
-      }
-
-      _.each( cs.preview.request( 'responsive:text' ), function( item ) {
-        scope.$(item.selector).fitText( item.compression, {
-          minFontSize: item.min_size,
-          maxFontSize: item.max_size,
-        });
-      }, this );
-
-    } );
+		this.listenToOnce( cs.render, 'primed', this.primed );
+    this.listenTo( cs.global, 'settings:ready', this.settingsPingback );
+    this.listenTo( cs.global, 'update:custom_css', this.customCSS );
+    this.listenTo( cs.global, 'update:responsive_text', this.responsiveText );
+    this.listenTo( cs.global, 'ajax:fallback', function( state ) {
+			cs.fallbackAjax = state;
+		} );
+    cs.events.trigger( 'preview:iframe:reloaded' );
 
   },
+
+  primed: function() {
+		if ( cs.global.request( 'editor:ready' ) )
+			return;
+		cs.global.trigger( 'preview:primed' );
+	},
+
+  settingsPingback: function(){
+  	cs.global.trigger( 'settings:pingback' );
+  },
+
+  customCSS: function( value ) {
+  	Backbone.$('#cornerstone-custom-page-css').html( value );
+  },
+
+  responsiveText: function( elements ) {
+    cs.preview.reply( 'responsive:text', elements );
+    Backbone.$(window).trigger('fittextReset');
+    cs.preview.trigger( 'responsive:text' );
+  },
+
+  responsiveTextUpdate: function( scope ) {
+	  var scope = scope || Backbone;
+
+	  var items = cs.preview.request( 'responsive:text' );
+	  if (!items) return;
+
+    _.each( items , function( item ) {
+      scope.$(item.selector).fitText( item.compression, {
+        minFontSize: item.min_size,
+        maxFontSize: item.max_size,
+      });
+    }, this );
+
+  },
+
+  lateEnqueue: function( handle, html, src, done ) {
+		if ( Backbone.$('script[data-handle="' + handle + '"]').length == 0 ) {
+
+			var timeout = setTimeout(function(){
+				done('Unable to load: ' + handle );
+			}, 10000 );
+
+			var script = document.createElement('script');
+				Backbone.$('body').append(script);
+				script.onload = function() {
+				clearTimeout(timeout);
+				_.defer( done, 'Script loaded: ' + handle );
+				};
+
+				script.src = src;
+
+				Backbone.$(script).attr('data-handle', handle );
+
+		} else {
+			done();
+		}
+  }
 
 });
-},{"../views/main/preview.js":130,"./keybind":30}],32:[function(require,module,exports){
-module.exports = {
-
-	/**
-	 * AJAX Post function
-	 * (borrowed from wp-util.js)
-	 */
-	post: function( action, options ) {
-		if ( _.isObject( action ) ) {
-			options = action;
-		} else {
-			options = options || {};
-			options.data = _.extend( options.data || {}, { action: action });
-		}
-
-		options = _.defaults( options || {}, {
-			type:    'POST',
-			url:     cs.config.request('ajaxUrl'),
-			context: this
-		});
-
-		return Backbone.$.Deferred( function( deferred ) {
-			// Transfer success/error callbacks.
-			if ( options.success )
-				deferred.done( options.success );
-			if ( options.error )
-				deferred.fail( options.error );
-
-			delete options.success;
-			delete options.error;
-
-			// Use with PHP's wp_send_json_success() and wp_send_json_error()
-			Backbone.$.ajax( options ).done( function( response ) {
-				if ( _.isObject( response ) && ! _.isUndefined( response.success ) )
-					deferred[ response.success ? 'resolveWith' : 'rejectWith' ]( this, [response.data, options]	);
-				else
-					deferred.rejectWith( this, [response] );
-			}).fail( function() {
-				deferred.rejectWith( this, arguments );
-			});
-		}).promise();
-	}
-};
-},{}],33:[function(require,module,exports){
+},{"../../views/main/preview.js":91}],24:[function(require,module,exports){
 var media = wp.media;
 var l10n = media.view.l10n;
 wp.media.view.MediaFrame.Cornerstone = wp.media.view.MediaFrame.Post.extend({
@@ -2127,72 +1837,31 @@ wp.media.view.MediaFrame.Cornerstone = wp.media.view.MediaFrame.Post.extend({
 //   }
 
 // });
-},{}],34:[function(require,module,exports){
-var ajax = require('../utility/ajax.js');
+},{}],25:[function(require,module,exports){
+(function($){
 
-module.exports = Mn.Object.extend({
+    var $shadow = $('<div class="shadow-height" style="position:absolute;top:-100%;visibility:hidden;"></div>');
 
-	initialize: function() {
-		this.jobs = {};
-		this.run = _.debounce( _.bind( this.run, this ), parseInt( cs.config.request( 'remoteRenderDelay' ), 10 ) );
-	},
+    $.fn.shadowHeight = function(){
 
-	queue: function( id, data, callback ) {
+    		if (this.length < 1) return;
 
-		this.jobs[ id ] = { data: data, callback: callback };
-		this.run();
+        var $el = this.length > 1 ? this.eq(0) : this
+        var $copy = $el.clone();
 
-	},
+    		$shadow.empty().appendTo('body');
+    		$shadow.append($copy);
 
-	run: function(){
+    		var height = $copy.outerHeight();
 
-		//cs.log( 'cs:remote:render');
+    		$shadow.detach();
+    		$copy.remove();
 
-		var batch = _.map( this.jobs, function( value, key) {
-			return { jobID: key, data: value.data || {} };
-		});
-		var data = {
-			post_id: cs.data.request('post_id'),
-    	request: JSON.stringify( batch ),
-		}
+				return height;
+    };
 
-		if (cs.skeleton)
-			data['no_do_shortcode'] = true;
-
-		var request = ajax.post( 'cs_render_element', {
-			registeredJobs: _.clone( this.jobs ),
-			data: data,
-			success: _.bind( function( response, options ) {
-
-				if ( !_.isArray( response ) ) {
-					cs.warn('REMOTE:RENDER', 'FAIL'); return;
-				}
-
-				_.each( response, function( job ) {
-
-					var registeredJob = options.registeredJobs[ job.jobID ];
-					if ( job.render.indexOf('%%TMPL%%') == 0 ) {
-						job.render = job.render.replace('%%TMPL%%','');
-						job.render = _.template(job.render);
-					}
-					registeredJob.callback.call( this, job.render );
-
-				});
-
-			}, this ),
-			error: function( response ) {
-				if (response.message == '0') {
-					cs.warn( 'Invalid render response. Check for PHP errors, or that the user is logged in.' );
-					return;
-				}
-				cs.warn( response.message );
-			}
-		} );
-
-		this.jobs = {};
-	}
-});
-},{"../utility/ajax.js":32}],35:[function(require,module,exports){
+})(jQuery);
+},{}],26:[function(require,module,exports){
 /**
  * Custom Renderer using Cornerstone precompiled templates as a source
  * Includes global template helpers
@@ -2201,10 +1870,17 @@ module.exports = {
 
 	templateHelpers: require('./template-helpers'),
 
-	render: function(template, data) {
+	render: function( template, data, view ) {
+
+		var data = data || {};
+
+    if ( view && _.isFunction( view.triggerMethod ) )
+    	view.triggerMethod( 'template:data:ready', data );
+
+    if ( template === false ) return;
 
     if (!template) {
-      throw new Marionette.Error({
+      throw new Cornerstone.Mn.Error({
         name: 'TemplateNotFoundError',
         message: 'Cannot render the template since its false, null or undefined.'
       });
@@ -2213,21 +1889,35 @@ module.exports = {
     var templateFunc = _.isFunction(template) ? template : cs.template( template );
 
     if (!templateFunc) {
-      throw new Marionette.Error({
+      throw new Cornerstone.Mn.Error({
         name: 'TemplateLookupError',
         message: 'Template not found in precompiled templates: ' + template
       });
     }
 
-    var data = data || {};
     return templateFunc( _.extend( data, this.templateHelpers ) );
   }
 }
-},{"./template-helpers":37}],36:[function(require,module,exports){
+},{"./template-helpers":29}],27:[function(require,module,exports){
+module.exports.layoutIsValid = function( layout ) {
+	return _([ '1/1','1/2 + 1/2','2/3 + 1/3','1/3 + 2/3','1/3 + 1/3 + 1/3','3/4 + 1/4','1/4 + 3/4','1/2 + 1/2','1/2 + 1/4 + 1/4','1/4 + 1/2 + 1/4','1/4 + 1/4 + 1/2','1/4 + 1/4 + 1/4 + 1/4','4/5 + 1/5','1/5 + 4/5','3/5 + 2/5','2/5 + 3/5','3/5 + 1/5 + 1/5','1/5 + 3/5 + 1/5','1/5 + 1/5 + 3/5','2/5 + 2/5 + 1/5','2/5 + 1/5 + 2/5','1/5 + 2/5 + 2/5','2/5 + 1/5 + 1/5 + 1/5','1/5 + 2/5 + 1/5 + 1/5','1/5 + 1/5 + 2/5 + 1/5','1/5 + 1/5 + 1/5 + 2/5','1/5 + 1/5 + 1/5 + 1/5 + 1/5','5/6 + 1/6','1/6 + 5/6','2/3 + 1/3','1/3 + 2/3','2/3 + 1/6 + 1/6','1/6 + 2/3 + 1/6','1/6 + 1/6 + 2/3','1/2 + 1/2','1/2 + 1/3 + 1/6','1/2 + 1/6 + 1/3','1/3 + 1/2 + 1/6','1/3 + 1/6 + 1/2','1/6 + 1/2 + 1/3','1/6 + 1/3 + 1/2','1/2 + 1/6 + 1/6 + 1/6','1/6 + 1/2 + 1/6 + 1/6','1/6 + 1/6 + 1/2 + 1/6','1/6 + 1/6 + 1/6 + 1/2','1/3 + 1/3 + 1/3','1/3 + 1/3 + 1/6 + 1/6','1/3 + 1/6 + 1/3 + 1/6','1/3 + 1/6 + 1/6 + 1/3','1/6 + 1/3 + 1/3 + 1/6','1/6 + 1/3 + 1/6 + 1/3','1/6 + 1/6 + 1/3 + 1/3','1/3 + 1/6 + 1/6 + 1/6 + 1/6','1/6 + 1/3 + 1/6 + 1/6 + 1/6','1/6 + 1/6 + 1/3 + 1/6 + 1/6','1/6 + 1/6 + 1/6 + 1/3 + 1/6','1/6 + 1/6 + 1/6 + 1/6 + 1/3','1/6 + 1/6 + 1/6 + 1/6 + 1/6 + 1/6' ])
+				  .contains( layout );
+}
+
+module.exports.reduceFractions = function( replace ) {
+  reductions = [{f:'2\/4', r: '1/2'},{f:'2\/6', r: '1/3'},{f:'3\/6', r: '1/2'},{f:'4\/6', r: '2/3'}];
+  var string = replace;
+  _(reductions).each(function(reducer){
+    var re = new RegExp(reducer.f,"g");
+    string = string.replace(re,reducer.r)
+  });
+  return string;
+}
+},{}],28:[function(require,module,exports){
 String.prototype.replaceAll = function (find, replace) {
   return this.replace(new RegExp(find.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"), 'g'), replace);
 }
-},{}],37:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 var TemplateHelpers = {
 	/**
 	 * Wrapper for global l18n
@@ -2254,7 +1944,7 @@ var TemplateHelpers = {
 	 * Access to renderer inside templates
 	 */
 	render: function() {
-		return Mn.Renderer.render.apply( this, arguments  );
+		return CS.Mn.Renderer.render.apply( this, arguments  );
 	},
 
 	/**
@@ -2263,14 +1953,14 @@ var TemplateHelpers = {
 	debug: function ( message ) { return ''; }
 }
 
-if ( cs.config.request('debug') ) {
+if ( cs.debug() ) {
 	TemplateHelpers.debug = function ( message ) { return message; }
 }
 
 module.exports = TemplateHelpers;
 
-},{}],38:[function(require,module,exports){
-module.exports = Mn.CompositeView.extend({
+},{}],30:[function(require,module,exports){
+module.exports = CS.Mn.CompositeView.extend({
 	tagName: 'li',
 	template: 'controls/base',
 	controlName: 'default',
@@ -2293,32 +1983,17 @@ module.exports = Mn.CompositeView.extend({
 		/**
 		 * Call Super (Parent constructors, and eventually initialize)
 		 */
-    Mn.CompositeView.apply( this, arguments );
+    CS.Mn.CompositeView.apply( this, arguments );
 
-    /**
-     * Setup model proxy, and add stickit bindings
-     */
+    this.configureProxy();
+    this.listenTo( this.model, 'set:proxy', this.configureProxy );
 
-    this.proxy = this.model.proxy || null;
-
-    this.listenTo( cs.options, 'changed', function(){
+    this.listenTo( cs.options, 'changed', function( option ){
+    	if ( this.model.get('name') == option ) return;
     	this.triggerMethod( 'options:changed' );
     } );
 
-    var options = this.model.get('options');
-    if ( this.proxy && options.condition ) {
-    	_.each( _.keys( options.condition ) , function( item ) {
-
-				if ( item.indexOf(':not') == item.length - 4 ) item = item.replace( ':not', '' );
-        if ( item.indexOf('parent:') == 0 ) item = item.replace( 'parent:', '' );
-    		this.listenTo(this.proxy, 'change:' + item, this.toggleVisibility );
-
-    	}, this );
-    }
     this.on('render', this.baseRender );
-
-    if (this.proxy)
-    	this.triggerMethod( 'proxy:ready' );
 
     /**
      * Ensure a controlTemplate is defined
@@ -2331,33 +2006,51 @@ module.exports = Mn.CompositeView.extend({
 
 	},
 
-	onOptionsChanged: function () {
-		if ( !this.model.optionExempt )
-			this.render();
+	configureProxy: function() {
+
+		if ( this.proxy )
+			this.stopListening( this.proxy );
+
+    this.proxy = this.model.proxy || null;
+    if ( _.isNull( this.proxy ) ) return;
+
+    var conditions = this.model.get('condition');
+    if ( conditions ) {
+    	_.each( _.keys( conditions ) , function( item ) {
+
+				if ( item.indexOf(':not') == item.length - 4 ) item = item.replace( ':not', '' );
+        if ( item.indexOf('parent:') == 0 ) item = item.replace( 'parent:', '' );
+    		this.listenTo(this.proxy, 'change:' + item, this.toggleVisibility );
+
+    	}, this );
+    }
+
+  	this.triggerMethod( 'proxy:ready' );
+
+	},
+
+	onOptionsChanged: function() {
+		this.render();
 	},
 
 	toggleVisibility: function() {
 
 		var visible = true;
-		var options = this.model.get('options');
+		var conditions = this.model.get('condition');
 
-		if (options.advanced && !cs.options.request( 'adv:controls' ) ) {
-			visible = false;
-		}
-
-		if ( !_.isNull(this.proxy) && options.condition ) {
+		if ( !_.isNull(this.proxy) && conditions ) {
 
 			// We want this to be empty, so returning false for all items
 			// means all conditions have been met
-			var remainingConditions = _.filter( _.keys( options.condition ) , _.bind( function( conditionName ) {
+			var remainingConditions = _.filter( _.keys( conditions ) , _.bind( function( conditionName ) {
 
 				var negate = ( conditionName.indexOf(':not') == conditionName.length - 4 );
-				var conditionValue = options.condition[conditionName];
+				var conditionValue = conditions[conditionName];
 
 				if (negate) conditionName = conditionName.replace(':not','');
 
         if ( conditionName.indexOf('parent:') == 0 ) {
-          source = this.proxy.collection.parentEl;
+          source = this.proxy.getParent();
           conditionName = conditionName.replace('parent:','');
         } else {
           source = this.proxy;
@@ -2392,20 +2085,22 @@ module.exports = Mn.CompositeView.extend({
 
 		this.triggerMethod('before:base:render');
 
-		if ( ( !this.model.get('controlTitle') && this.canCompact ) || this.model.get('compact') ) this.$el.addClass('cs-control-compact');
-		if ( this.model.get('divider') || this.divider ) this.$el.addClass('cs-control-divider');
+		var ui = this.model.get('ui')
+		var options = this.model.get('options')
+
+		if ( ( !ui.title && this.canCompact ) || options.compact ) this.$el.addClass('cs-control-compact');
+		if ( ui.divider || this.divider ) this.$el.addClass('cs-control-divider');
 
 		this.$el.attr('data-name', this.model.get('name') );
 		this.toggleVisibility();
 		this.stickitBindings();
-
 		this.triggerMethod('after:base:render');
 	},
 
 	stickitBindings: function() {
 
 		var selector = this.bindingSelector || 'input[type=hidden]';
-		var config = { observe: this.model.get('name') };
+		var config = { observe: this.model.get('key') };
 
 		if (this.binding)
 			_.extend( config, this.binding )
@@ -2422,29 +2117,30 @@ module.exports = Mn.CompositeView.extend({
 	serializeData: function() {
 
 		var options = this.model.get('options');
-		var subText = false;
+		var ui = _.clone( this.model.get('ui') );
 
-		if ( options.subText ) {
-			subText = options.subText;
-			if ( subText.indexOf('!!') == 0 ) {
-				subText = subText.replace('!!','');
-			} else if ( !cs.options.request( 'help:text' ) ) {
-				subText = false;
-			}
-
+		if ( ui.message && ui.message.indexOf('[HelpText]') == 0) {
+			ui.message = ui.message.replace('[HelpText]','');
 		}
 
-		var data = _.extend( Mn.CompositeView.prototype.serializeData.apply(this,arguments), {
+		if ( !cs.options.request( 'help:text' ) && options.helpText !== false ) {
+			ui.message = false;
+		}
+
+		var data = _.extend( CS.Mn.CompositeView.prototype.serializeData.apply(this,arguments), {
 			controlTemplate: this.controlTemplate,
-			controlType: this.model.get('controlType'),
-			subText: subText
+			controlType: this.model.get('type'),
+			ui: ui
 		});
 
-		if ( data.controlTitle )
-			data.controlTitle = this.replacePlaceholders( data.controlTitle );
+		if ( data.ui.title )
+			data.ui.title = this.replacePlaceholders( data.ui.title );
 
-		if ( data.controlTooltip )
-			data.controlTooltip = this.replacePlaceholders( data.controlTooltip );
+		if ( data.ui.tooltip )
+			data.ui.tooltip = this.replacePlaceholders( data.ui.tooltip );
+
+		if ( data.ui.message )
+			data.ui.message = this.replacePlaceholders( data.ui.message );
 
 		if ( this.proxy )
 			_.extend( data, this.proxy.toJSON() );
@@ -2456,7 +2152,10 @@ module.exports = Mn.CompositeView.extend({
 
 	},
 
-	textReplacements: {
+	baseTextReplacements: {
+		'%%element-name%%': function() {
+			return this.proxy.definition.get('name');
+		},
 		'%%icon%%': function() {
 			return cs.icon( this.model.get('name') );
 		},
@@ -2470,9 +2169,8 @@ module.exports = Mn.CompositeView.extend({
 
 	replacePlaceholders: function ( text ) {
 
-		_.each( this.textReplacements, _.bind( function( callback, tag ) {
+		_.each( _.extend( this.textReplacements || {}, this.baseTextReplacements ), _.bind( function( callback, tag ) {
 			if ( text.indexOf( tag ) == -1 ) return;
-
 			text = text.replace( new RegExp( tag, 'g'), callback.apply(this) );
 		}, this) );
 
@@ -2489,16 +2187,27 @@ module.exports = Mn.CompositeView.extend({
   expandControl: function() {
     this.triggerMethod( 'before:expand' );
     this.$el.addClass( 'cs-control-expanded' );
-    cs.extra.trigger( 'expand:control', this );
+    cs.events.trigger( 'expand:control', this.proxy.getSource(), this.model.get('name'), this );
+
+    this.listenToOnce( cs.events, 'expand:close', this.expandClose );
   },
 
-  onExpandClose: function() {
-    this.$el.removeClass( 'cs-control-expanded' );
+  expandClose: function() {
+
+  	this.proxy.refresh();
+  	this.$el.removeClass( 'cs-control-expanded' );
+  	this.render();
+  	this.triggerMethod( 'after:expand' );
+    // this.$el.removeClass( 'cs-control-expanded' ).one( 'transitionend', _.bind( function() {
+    // 	this.render();
+    //
+    // }, this ) );
+
   },
 
 });
-},{}],39:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],31:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-breadcrumbs cs-control-divider',
   template: 'inspector/breadcrumbs',
@@ -2510,22 +2219,24 @@ module.exports = Mn.ItemView.extend({
   },
 
   initialize: function() {
-    this.levels = this.findLevels([],this.model.proxy);
+    this.levels = this.findLevels( [], this.model.proxy.getSource() );
   },
 
   mouseOver: function( e ) {
     var level = this.buttonLevel( e );
-    if ( level  ) level.model.trigger( 'observe:in' );
+    if ( level  ) level.model.trigger( 'observe:start' );
   },
 
   mouseOut: function( e ) {
     var level = this.buttonLevel( e );
-    if ( level  ) level.model.trigger( 'observe:out' );
+    if ( level  ) level.model.trigger( 'observe:end' );
   },
 
   inspect: function( e ) {
     var level = this.buttonLevel( e );
-    if ( level  ) level.model.trigger( 'inspect' );
+    if ( !level ) return;
+    cs.events.trigger( 'inspect:element', level.model );
+    //cs.navigate.trigger( 'inspector:home' );
   },
 
   buttonLevel: function( e ) {
@@ -2534,32 +2245,29 @@ module.exports = Mn.ItemView.extend({
 
   findLevels: function( levels, model ) {
 
-    var type, label, title, meta;
-
-    type = model.elType.get('name');
-
-    if ( type != 'section' && model.collection.parentEl ) {
-      levels = this.findLevels( levels, model.collection.parentEl );
+    if ( model.get('_type') != 'section' && model.collection && model.collection.parent ) {
+      levels = this.findLevels( levels, model.collection.parent );
     }
 
-    label = model.elType.get('title');
+    var item = {
+    	label: model.definition.get('ui').title,
+    	model: model
+    };
 
-    switch (type) {
+    switch ( model.get('_type') ) {
       case 'section':
-        title = model.get('title');
+        item.title = model.get('title');
+        item.label = cs.l18n('section');
         break;
       case 'row':
-        title = model.get('meta').tooltip;
+        item.label = cs.l18n('row');
         break;
       case 'column':
-        title = cs.l18n('column-format').replace('%s', model.get('title') );
+        item.label = cs.l18n('column');
         break;
-      default:
-        title = model.elType.get('title');
     }
 
-
-    levels.push({label: label, title: title, model: model });
+    levels.push( item );
 
     return levels;
   },
@@ -2568,12 +2276,17 @@ module.exports = Mn.ItemView.extend({
     return {
       items: _.first( this.levels, 4 ),
       count: this.levels.length,
-      rtl: ( cs.config.request( 'isRTL' ) == 'true' )
+      rtl: ( cs.config( 'isRTL' ) == 'true' )
     }
   },
+
+  onRender: function( ) {
+  	if ( this.levels.length <= 1 && !this.levels[0].title ) this.$el.toggleClass( 'hide', true );
+  }
+
 });
-},{}],40:[function(require,module,exports){
-	module.exports = cs.ControlViews.Base.extend({
+},{}],32:[function(require,module,exports){
+	module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'choose',
 	binding: {
     initialize: function($el, model, options) {
@@ -2626,8 +2339,8 @@ module.exports = Mn.ItemView.extend({
     }
   }
 });
-},{}],41:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],33:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'div',
 	className: 'cs-control-external cs-control-code-editor',
 	template: _.template('<textarea></textarea>'),
@@ -2635,7 +2348,7 @@ module.exports = Mn.ItemView.extend({
 	initialize: function(){
 
 		this.listenTo( cs.navigate, 'open:code:editor', function( name ){
-			if (name == this.model.get('name')){
+			if (name == this.model.get('key')){
 				this.$('textarea').csCodeEditorShow();
 			}
 		});
@@ -2645,7 +2358,7 @@ module.exports = Mn.ItemView.extend({
 	onRender: function() {
 		var localOpts, options;
 
-		this.$('textarea').val(this.model.proxy.get(this.model.get('name')));
+		this.$('textarea').val(this.model.proxy.get(this.model.get('key')));
 
 		localOpts = this.model.get('options');
 
@@ -2653,7 +2366,7 @@ module.exports = Mn.ItemView.extend({
 
 	 	options = _.extend( options, {
 			change: _.bind(function( cm ){
-				this.model.proxy.set(this.model.get('name'),cm.doc.getValue());
+				this.model.proxy.set(this.model.get('key'),cm.doc.getValue());
 			}, this )
 		});
 
@@ -2666,8 +2379,8 @@ module.exports = Mn.ItemView.extend({
 	}
 
 });
-},{}],42:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],34:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 controlName: 'color',
 	binding: {
 		initialize: function($el, model, options) {
@@ -2712,8 +2425,8 @@ controlName: 'color',
 		}
 	},
 });
-},{}],43:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],35:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'inspector/column-actions',
@@ -2739,35 +2452,57 @@ module.exports = Mn.ItemView.extend({
   },
 
   layout: function() {
-    cs.navigate.trigger( 'layout:section', { section: this.proxy.collection.parentEl.collection.parentEl, row: this.proxy.collection.parentEl } );
+  	cs.events.trigger( 'inspect:layout:row', this.proxy.getSourceParent() );
+  	cs.navigate.trigger( 'layout:rows' );
   },
 
   onConfirmAccept: function() {
-    cs.channel.trigger( 'column:erase', { model: this.proxy } );
+    cs.elements.trigger( 'erase', { model: this.proxy.getSource() } );
   },
 
 });
-},{}],44:[function(require,module,exports){
-module.exports = Mn.CollectionView.extend({
+},{}],36:[function(require,module,exports){
+module.exports = CS.Mn.CollectionView.extend({
 	tagName: 'ul',
+
 	className: 'cs-controls',
-	initialize: function(opts) {
-		this.autoFocus = opts.autoFocus;
+
+	initialize: function() {
+		this.repaint = _.debounce( _.bind( this.render, this ), 4 );
+		this.listenTo( this.collection, 'add', this.repaint );
+		this.listenTo( this.collection, 'remove', this.repaint );
+		this.listenTo( this.collection, 'reset', this.repaint );
+		this.listenTo( cs.navigate, 'auto:focus', this.autoFocus );
 	},
-	getChildView: function( item ) { return cs.controlLookup(item.get('controlType')); },
+
+	getChildView: function( item ) { return cs.controlLookup( item.get('type') ); },
+
 	onRender: function() {
-
-		_.delay( _.bind( function() {
-			this.$('[data-name="' + this.autoFocus + '"]').find('input[type="text"],textarea').focus();
+		_.defer( _.bind( function(){
+			this.$el.toggleClass( 'empty', this.collection.isEmpty() );
+			this.autoFocus();
 		}, this ) );
+	},
 
-		if ( this.collection.isEmpty() )
-			this.$el.addClass('empty');
+	autoFocus: function( ) {
 
-	}
+  	var name = cs.navigate.request( 'auto:focus' );
+
+  	if ( false === name )
+  		return;
+
+  	var $control = this.$('[data-name="' + name + '"]');
+
+  	if ( $control.length > 0 && !$control.hasClass( 'cs-control-expanded' ) ) {
+  		cs.navigate.reply(false);
+  		$control.find('input[type="text"],textarea').focus();
+  	}
+
+  }
+
 })
-},{}],45:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],37:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	template: 'controls/custom-markup',
 	controlName: 'custom-markup',
 	controlData: function() {
@@ -2776,8 +2511,8 @@ module.exports = cs.ControlViews.Base.extend({
 		return { message: message };
 	},
 });
-},{}],46:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],38:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'dimensions',
 	binding: {
 	  initialize: function($el, model, options) {
@@ -2885,8 +2620,8 @@ module.exports = cs.ControlViews.Base.extend({
     }
 	}
 });
-},{}],47:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],39:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
   controlName: 'editor',
   controlTemplate: 'controls/textarea',
   bindingSelector: 'textarea.cs-wp-editor',
@@ -2909,13 +2644,17 @@ module.exports = cs.ControlViews.Base.extend({
     }
 
     tinyMCEPreInit.mceInit[ this.editorID ].setup = _.bind(function(editor) {
-      editor.on( 'keyup change', _.debounce( _.bind( function() {
+
+    	var update = _.debounce( _.bind( function() {
         editor.save(); // Commit editor contents to original textarea
         this.$('.cs-wp-editor').trigger('change'); // Trigger stickit
-      }, this ), 150 ) );
+      }, this ), 150 )
+
+      editor.on( 'keyup change NodeChange', update );
+
     }, this );
 
-    this.markup = cs.config.request('editor')
+    this.markup = cs.config('editorMarkup')
       .replace( new RegExp('cswpeditor', 'g'), this.editorID )
       .replace( new RegExp('%%PLACEHOLDER%%', 'g'), this.proxy.get('content') );
 
@@ -2969,15 +2708,15 @@ module.exports = cs.ControlViews.Base.extend({
   },
 
   replacements: {
-    '<!--nextpage-->': '<!--!nextpage-->',
-    '<!--more-->': '<!--!more-->'
+    // '<!--nextpage-->': '<!--!nextpage-->',
+    // '<!--more-->': '<!--!more-->'
   },
 
   textReplace: function( content ) {
 
-    _.each(this.replacements, function(replace, find){
-      content = content.replaceAll( find, replace );
-    });
+    // _.each(this.replacements, function(replace, find){
+    //   content = content.replaceAll( find, replace );
+    // });
 
     return content;
 
@@ -2988,8 +2727,8 @@ module.exports = cs.ControlViews.Base.extend({
   }
 
 });
-},{}],48:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],40:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'inspector/element-actions',
@@ -3015,30 +2754,22 @@ module.exports = Mn.ItemView.extend({
   },
 
   duplicate: function() {
-    this.proxy.collection.duplicate( this.proxy );
+  	cs.elements.trigger( 'duplicate', this.proxy.getSource() );
   },
 
   onConfirmAccept: function() {
-    cs.channel.trigger( 'element:delete', { model: this.proxy, success: function() {
+    cs.elements.trigger( 'delete', { model: this.proxy.getSource(), success: function() {
       cs.confirm.trigger( 'complete' );
     	cs.channel.trigger( 'inspect:nothing' );
     } } );
   },
 
 });
-},{}],49:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
-	template: 'controls/element-info',
-	controlName: 'element-info',
-	onCustomVisibility: function() {
-		this.$el.toggleClass( 'hide', !cs.options.request( 'help:text' ) );
-	}
-});
-},{}],50:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],41:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'icon-choose',
   childViewContainer: 'ul.cs-choose',
-  childView: Mn.ItemView.extend({
+  childView: CS.Mn.ItemView.extend({
     tagName: 'li',
     template: 'controls/icon-choose-item'
   }),
@@ -3051,7 +2782,7 @@ module.exports = cs.ControlViews.Base.extend({
   initialize: function() {
     this.iconData = cs.data.request('get:icons');
     this.filteredIcons = this.iconData;
-    this.iconNames = cs.config.request( 'fontAwesome' );
+    this.iconNames = cs.config( 'fontAwesome' );
 
     this.lazyUpdateSearch = _.debounce( this.updateSearch, 250 );
   },
@@ -3170,9 +2901,9 @@ module.exports = cs.ControlViews.Base.extend({
   }
 
 });
-},{}],51:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 
-var ImageControl = cs.ControlViews.Base.extend({
+var ImageControl =  Cornerstone.ControlViews.Base.extend({
   controlName: 'image',
   binding: {
     initialize: function($el, model, options) {
@@ -3262,7 +2993,7 @@ var ImageControl = cs.ControlViews.Base.extend({
 });
 
 module.exports = ImageControl;
-},{}],52:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 module.exports = {
 
 	// General Purpose
@@ -3284,7 +3015,7 @@ module.exports = {
 	'dimensions'              : require('./dimensions'),
 
 	// Special
-	'element-info'            : require('./element-info'),
+	'info-box'                : require('./info-box'),
 	'custom-markup'           : require('./custom-markup'),
 	'breadcrumbs'             : require('./breadcrumbs'),
 
@@ -3302,7 +3033,6 @@ module.exports = {
 
 	// Layout
 	'sortable-sections'       : require('./layout/sortable-sections'),
-	'sortable-columns'        : require('./layout/sortable-columns'),
 	'sortable-rows'           : require('./layout/sortable-rows'),
 	'column-layout'           : require('./layout/column-layout'),
 	'column-order'            : require('./layout/column-order'),
@@ -3311,13 +3041,23 @@ module.exports = {
 	'template-save-dialog'    : require('./layout/template-save-dialog'),
 	'template-upload-dialog'  : require('./layout/template-upload-dialog')
 }
-},{"./breadcrumbs":39,"./choose":40,"./code-editor":41,"./color":42,"./column-actions":43,"./custom-markup":45,"./dimensions":46,"./editor":47,"./element-actions":48,"./element-info":49,"./icon-choose":50,"./image":51,"./layout/column-layout":53,"./layout/column-order":55,"./layout/layout-actions":56,"./layout/sortable-columns":57,"./layout/sortable-rows":59,"./layout/sortable-sections":60,"./layout/template-actions":61,"./layout/template-remove":62,"./layout/template-save-dialog":63,"./layout/template-select":64,"./layout/template-upload-dialog":65,"./multi-choose":66,"./number":67,"./row-actions":68,"./section-actions":69,"./select":70,"./settings-actions":71,"./sortable":74,"./text":75,"./textarea":76,"./title":77,"./toggle":78,"./wpselect":79}],53:[function(require,module,exports){
-var RowValidator = require('../../../data/models/row-validator');
-module.exports = cs.ControlViews.Base.extend({
+},{"./breadcrumbs":31,"./choose":32,"./code-editor":33,"./color":34,"./column-actions":35,"./custom-markup":37,"./dimensions":38,"./editor":39,"./element-actions":40,"./icon-choose":41,"./image":42,"./info-box":44,"./layout/column-layout":45,"./layout/column-order":47,"./layout/layout-actions":48,"./layout/sortable-rows":49,"./layout/sortable-sections":50,"./layout/template-actions":51,"./layout/template-remove":52,"./layout/template-save-dialog":53,"./layout/template-select":54,"./layout/template-upload-dialog":55,"./multi-choose":56,"./number":57,"./row-actions":58,"./section-actions":59,"./select":60,"./settings-actions":61,"./sortable":64,"./text":65,"./textarea":66,"./title":67,"./toggle":68,"./wpselect":69}],44:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
+	template: 'controls/info-box',
+	controlName: 'info-box',
+	onCustomVisibility: function() {
+		// TODO: Info boxes should have a control option to force visibility instead
+		// of hiding with help text.
+		this.$el.toggleClass( 'hide', !cs.options.request( 'help:text' ) );
+	}
+});
+},{}],45:[function(require,module,exports){
+var RowValidator = require('../../../utility/row-validator');
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'column-layout',
 	bindings: {
     '#column-layout': {
-      observe: 'columnLayout',
+      observe: '_column_layout',
       events: ['blur'],
       onSet: 'formatColumnLayout',
       updateModel: 'confirmFormat',
@@ -3337,23 +3077,23 @@ module.exports = cs.ControlViews.Base.extend({
           // Update active columns
           if ( value != 'custom' ) {
             var widths = value.split(" + ");
-            var columns = model.get('elements');
 
-            columns.each(function(column){
+            model.elements.each(function(column){
+
 
               if ( _.isEmpty( widths ) ) {
-                column.set( 'active', false );
+                column.set( '_active', false );
+
                 return;
               }
 
-              column.set( 'active', true );
+              column.set( '_active', true );
               var width = widths.shift()
-              column.set( 'title', width );
               column.set( 'size', width );
 
             });
 
-            columns.sort();
+            model.elements.sort();
           }
 
           // Update control state
@@ -3385,7 +3125,7 @@ module.exports = cs.ControlViews.Base.extend({
             model.set( options.observe, data );
             this.$('#column-layout').val( data );
           }
-        }, this) );
+        }, this ) );
 
         /**
          * Set the initial active state, then listen to model changes to change the state later
@@ -3393,16 +3133,18 @@ module.exports = cs.ControlViews.Base.extend({
         setActive( model, model.get( options.observe ) );
         this.listenTo( model, 'change:' + options.observe, setActive );
 
-        this.listenTo( model.get('elements'), 'sort', function() {
+        this.listenTo( model, 'position:updated', this.render );
+
+
+        this.listenTo( model.elements, 'sort', function() {
 
           var columnWidths = [];
-          var columns = model.get('elements');
 
-          columns.each( function( column ) {
-            if ( column.get( 'active' ) ) columnWidths.push( column.get( 'size' ) );
+          model.elements.each( function( column ) {
+            if ( column.get( '_active' ) ) columnWidths.push( column.get( 'size' ) );
           } );
 
-          model.set( 'columnLayout', columnWidths.join(' + ').trim() );
+          model.set( '_column_layout', columnWidths.join(' + ').trim() );
 
         } );
 
@@ -3416,11 +3158,17 @@ module.exports = cs.ControlViews.Base.extend({
 
   confirmFormat: function(value, event, options) {
     return RowValidator.layoutIsValid( this.formatColumnLayout( value ) );
-  }
+  },
+
+  textReplacements: {
+		'%%title%%': function() {
+    	return cs.l18n('row-numeric').replace('%s', this.proxy.getIndex() + 1 );
+  	}
+	}
 
 });
-},{"../../../data/models/row-validator":22}],54:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{"../../../utility/row-validator":27}],46:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
 	template: 'controls/column-order-item',
 
@@ -3459,27 +3207,21 @@ module.exports = Mn.ItemView.extend({
     }
   },
 
-  serializeData: function( ) {
-    return _.extend( Mn.ItemView.prototype.serializeData.apply(this,arguments), {
-      icons: this.icons
-    });
-  },
-
   mouseOver: function( e ) {
-    this.model.trigger('observe:in');
+    this.model.trigger('observe:start');
   },
 
   mouseOut: function( e ) {
-    this.model.trigger('observe:out');
+    this.model.trigger('observe:end');
   }
 
 })
-},{}],55:[function(require,module,exports){
+},{}],47:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
   controlName: 'column-order',
-  emptyView: Mn.ItemView.extend({
+  emptyView: CS.Mn.ItemView.extend({
     tagName: 'li',
     className: 'column empty',
     template: false,
@@ -3487,19 +3229,20 @@ module.exports = Sortable.extend({
 
   sortableConfig: {
     items: ':not(.empty)',
-    // sortableClass: 'column-order-placeholder'
   },
 
   getChildView: function() {
     return require( './column-order-item' );
   },
 
-	filterBy: 'active',
-  //confirmMessage: cs.l18n('columns-erase-confirm'),
+	filterBy: '_active',
   canAdd: false,
-  //icons: { action1: 'search', action2: 'eraser' },
 
-
+	textReplacements: {
+		'%%title%%': function() {
+    	return cs.l18n('row-numeric').replace('%s', this.proxy.getIndex() + 1 );
+  	}
+	},
 
   onChildviewUpdateDragging: function( child ) {
 
@@ -3514,16 +3257,14 @@ module.exports = Sortable.extend({
   },
 
   onChildviewClickAction: function( child ) {
-    cs.navigate.trigger( 'inspector', { model: child.model } );
+  	cs.events.trigger( 'inspect:element', child.model );
+		cs.navigate.trigger( 'inspector:home' );
   },
 
-  onChildviewConfirmAccept: function( child ) {
-    cs.channel.trigger( 'column:erase', { model: child.model } );
-  },
 
 });
-},{"../sortable":74,"./column-order-item":54}],56:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{"../sortable":64,"./column-order-item":46}],48:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'layout/actions',
@@ -3544,11 +3285,8 @@ module.exports = Mn.ItemView.extend({
   	this.selected = options.selected || undefined;
   },
 
-  addItem:function() {
-    var sections = this.proxy.get('elements');
-    sections.create( {
-      title: cs.l18n('layout-new-section').replace('%s', ( sections.length + 1 ) )
-    } );
+  addItem: function() {
+  	cs.events.trigger( 'add:section' );
   },
 
   openTemplates: function() {
@@ -3556,51 +3294,12 @@ module.exports = Mn.ItemView.extend({
   }
 
 });
-},{}],57:[function(require,module,exports){
-var Sortable = require('../sortable');
-module.exports = Sortable.extend({
-
-  emptyView: Mn.ItemView.extend({
-    tagName: 'li',
-    className: 'column empty',
-    template: false,
-  }),
-
-	filterBy: 'active',
-  confirmMessage: cs.l18n('columns-erase-confirm'),
-  canAdd: false,
-
-  onChildviewClickHandle: function( child ) {
-    //child.$el.toggleClass( 'active' );
-  //  cs.navigate.trigger( 'inspector', { model: child.model } );
-  },
-
-  onChildviewClickAction: function( child ) {
-    cs.navigate.trigger( 'inspector', { model: child.model } );
-  },
-
-  onChildviewConfirmAccept: function( child ) {
-    cs.channel.trigger( 'column:erase', { model: child.model } );
-  },
-
-});
-},{"../sortable":74}],58:[function(require,module,exports){
-var SortableItemWide = require('../sortable-item-wide');
-
-module.exports = SortableItemWide.extend({
-
-  behaviors: {
-    Confirm: {
-      message: function(){ return ( this.atFloor() ) ? cs.l18n('layout-row-last-confirm') : this.confirmMessage; },
-    },
-  },
-
-});
-},{"../sortable-item-wide":72}],59:[function(require,module,exports){
+},{}],49:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
 	emptyView: false,
+	wideControls: true,
 
   confirmMessage: cs.l18n('layout-row-delete-confirm'),
   actions: [
@@ -3609,42 +3308,50 @@ module.exports = Sortable.extend({
     { icon: 'search', tooltip: cs.l18n('tooltip-inspect') },
   ],
 
-  initialize: function() {
-    this.listenTo( cs.navigate, 'layout:column', this.render );
-  },
-
-  getChildView: function(){
-    return require('./sortable-item-rows');
-  },
-
   customChildTitle: function( child ) {
-    return cs.l18n('layout-new-row').replace('%s', this.children.length);
+    return cs.l18n('row-numeric').replace( '%s', this.children.length );
   },
 
   onChildviewClickActionAlt: function( child ) {
-    cs.navigate.trigger( 'inspector', { model: child.model } );
-  },
-
-  onItemPositionUpdated: function() {
-    cs.navigate.trigger( 'layout:column', false );
+  	cs.events.trigger( 'inspect:element', child.model );
+    cs.navigate.trigger( 'inspector:home' );
   },
 
   onChildviewClickHandle: function( item ) {
-  	cs.navigate.trigger( 'layout:column', item );
+  	cs.events.trigger( 'inspect:layout:row', item.model );
   },
 
   onChildviewRender: function( child ) {
 
     var model = cs.navigate.request( 'layout:active:row' );
 
-    if ( model.cid == child.model.cid ) {
+    if ( model && child.model && model.cid == child.model.cid ) {
       child.$el.addClass('active');
     }
 
+  },
+
+  onRemoveItem: function( model ) {
+  	var active = cs.navigate.request( 'layout:active:row' );
+
+    if ( active && model && active.cid == model.cid ) {
+    	_.defer( _.bind( function(){
+    		this.inspectFirst();
+    	}, this ) );
+    }
+
+  },
+
+  inspectFirst: function() {
+  	cs.events.trigger( 'inspect:layout:row', this.collection.first() );
+  },
+
+  onResetLastItem: function() {
+  	this.inspectFirst();
   }
 
 });
-},{"../sortable":74,"./sortable-item-rows":58}],60:[function(require,module,exports){
+},{"../sortable":64}],50:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
@@ -3654,7 +3361,9 @@ module.exports = Sortable.extend({
   confirmMessage: cs.l18n('layout-row-delete-confirm'),
 
   onChildviewClickHandle: function( item ) {
-  	cs.navigate.trigger( 'layout:set:section', { section: item.model } );
+  	cs.events.trigger( 'inspect:layout:section', item.model );
+  	cs.navigate.trigger( 'layout:rows' );
+  	cs.navigate.trigger( 'auto:focus', 'title' );
   },
 
   onAfterBaseRender: function() {
@@ -3662,8 +3371,8 @@ module.exports = Sortable.extend({
   }
 
 });
-},{"../sortable":74}],61:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{"../sortable":64}],51:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-template-actions cs-control-divider',
   template: 'layout/sub-templates/template-actions',
@@ -3694,8 +3403,8 @@ module.exports = Mn.ItemView.extend({
   }
 
 });
-},{}],62:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],52:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
   //template: 'layout/sub-templates/template-select',
   controlName: 'template-select',
   bindingSelector: 'select',
@@ -3721,12 +3430,12 @@ module.exports = cs.ControlViews.Base.extend({
   },
 
   onConfirmAccept: function() {
-    cs.data.trigger( 'delete:template', this.$('select').val() )
+    cs.templates.trigger( 'delete', this.$('select').val() )
   },
 
 });
-},{}],63:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],53:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 
   template: 'layout/sub-templates/save-dialog',
   controlName: 'template-save-dialog',
@@ -3755,17 +3464,17 @@ module.exports = cs.ControlViews.Base.extend({
   },
 
   onConfirmAccept: function() {
-    cs.data.trigger( 'save:template', 'page', this.proxy.get( 'title' ) );
+    cs.templates.trigger( 'save', 'page', this.proxy.get( 'title' ) );
     this.close();
   },
 
   onConfirmDecline: function() {
-    cs.data.trigger( 'save:template', 'block', this.proxy.get( 'title' ) );
+    cs.templates.trigger( 'save', 'block', this.proxy.get( 'title' ) );
     this.close();
   },
 
   download: function() {
-    cs.channel.trigger( 'block:download', this.proxy.get( 'title' ) );
+    cs.templates.trigger( 'download', this.proxy.get( 'title' ) );
     this.proxy.set( 'action', 'none' );
   },
 
@@ -3779,8 +3488,8 @@ module.exports = cs.ControlViews.Base.extend({
   }
 
 });
-},{}],64:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],54:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	//template: 'layout/sub-templates/template-select',
   controlName: 'template-select',
 	bindingSelector: 'select',
@@ -3812,22 +3521,22 @@ module.exports = cs.ControlViews.Base.extend({
 		//cs.message.trigger( 'notice', 'Loading selected page template.' );
 
 		_.defer( _.bind( function() {
-			cs.data.trigger( 'import:template', this.$('select').val(), 'page' )
+			cs.templates.trigger( 'import', this.$('select').val(), 'page' )
 		}, this ) );
 	},
 
 	onInsertBlock: function() {
 		//cs.message.trigger( 'notice', 'Loading selected block.' );
 		_.defer( _.bind( function() {
-			cs.data.trigger( 'import:template', this.$('select').val(), 'block' )
+			cs.templates.trigger( 'import', this.$('select').val(), 'block' )
 		}, this ) );
 	},
 
 
 
 });
-},{}],65:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],55:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 
   template: 'layout/sub-templates/upload-dialog',
   controlName: 'template-upload-dialog',
@@ -3890,7 +3599,7 @@ module.exports = cs.ControlViews.Base.extend({
   },
 
   uploadComplete: function( template, format ) {
-    cs.data.trigger( 'import:template', template.elements, format );
+    cs.templates.trigger( 'import', template.elements, format );
     this.resetForm();
     this.close();
   },
@@ -3905,8 +3614,8 @@ module.exports = cs.ControlViews.Base.extend({
   }
 
 });
-},{}],66:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],56:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'multi-choose',
   controlTemplate: 'controls/choose',
 	binding: {
@@ -3964,13 +3673,13 @@ module.exports = cs.ControlViews.Base.extend({
     }
   }
 });
-},{}],67:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],57:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'number',
 	bindingSelector: 'input[type=number]'
 });
-},{}],68:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],58:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'inspector/row-actions',
@@ -3996,19 +3705,21 @@ module.exports = Mn.ItemView.extend({
   },
 
   layout: function() {
-    cs.navigate.trigger( 'layout:section', { section: this.proxy.collection.parentEl, row: this.proxy } );
+  	cs.events.trigger( 'inspect:layout:row', this.proxy.getSource() );
+  	cs.navigate.trigger( 'layout:rows' );
   },
 
   onConfirmAccept: function() {
-    cs.channel.trigger( 'element:delete', { model: this.proxy, success: function() {
+    cs.elements.trigger( 'delete', { model: this.proxy.getSource(), success: function() {
       cs.confirm.trigger( 'complete' );
-    	cs.channel.trigger( 'inspect:nothing' );
+      cs.events.trigger( 'inspect:clear' );
+    	cs.navigate.trigger( 'inspector:home' );
     } } );
   },
 
 });
-},{}],69:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],59:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'inspector/row-actions',
@@ -4034,19 +3745,21 @@ module.exports = Mn.ItemView.extend({
   },
 
   layout: function() {
-    cs.navigate.trigger( 'layout:section', { section: this.proxy } );
+  	cs.events.trigger( 'inspect:layout:section', this.proxy.getSource() );
+  	cs.navigate.trigger( 'layout:rows' );
   },
 
   onConfirmAccept: function() {
-    cs.channel.trigger( 'element:delete', { model: this.proxy, success: function() {
+    cs.elements.trigger( 'delete', { model: this.proxy.getSource(), success: function() {
       cs.confirm.trigger( 'complete' );
-    	cs.channel.trigger( 'inspect:nothing' );
+      cs.events.trigger( 'inspect:clear' );
+    	cs.navigate.trigger( 'inspector:home' );
     } } );
   },
 
 });
-},{}],70:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],60:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'select',
 	bindingSelector: 'select',
 	controlEvents: {
@@ -4062,8 +3775,8 @@ module.exports = cs.ControlViews.Base.extend({
 		}, this );
 	}
 });
-},{}],71:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],61:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
   template: 'settings/actions',
@@ -4095,7 +3808,7 @@ module.exports = Mn.ItemView.extend({
   },
 
   triggerJS: function() {
-    if ( cs.config.request('unfilteredHTML') == 'false' ) {
+    if ( cs.config('unfilteredHTML') == 'false' ) {
       cs.message.trigger( 'notice', cs.l18n( 'settings-js-denied' ), 8000 );
       return;
     }
@@ -4104,14 +3817,14 @@ module.exports = Mn.ItemView.extend({
   },
 
   onConfirmAccept: function() {
-    cs.channel.trigger( 'element:delete', { model: this.proxy, success: function() {
+    cs.elements.trigger( 'delete', { model: this.proxy, success: function() {
       cs.confirm.trigger( 'complete' );
     	cs.channel.trigger( 'inspect:nothing' );
     } } );
   },
 
 });
-},{}],72:[function(require,module,exports){
+},{}],62:[function(require,module,exports){
 var SortableItem = require('./sortable-item');
 
 module.exports = SortableItem.extend({
@@ -4133,8 +3846,8 @@ module.exports = SortableItem.extend({
   },
 
 });
-},{"./sortable-item":73}],73:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{"./sortable-item":63}],63:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 
   tagName: 'li',
   className: 'sortable-item',
@@ -4164,7 +3877,7 @@ module.exports = Mn.ItemView.extend({
   behaviors: {
     Confirm: {
       message: function(){ return ( this.atFloor() ) ? cs.l18n('sortable-at-floor') : this.confirmMessage; },
-      yep:     function(){ return ( this.atFloor() ) ? '' : cs.l18n('confirm-yep'); },
+      yep:     function(){ return cs.l18n('confirm-yep'); },
       nope:    function(){ return ( this.atFloor() ) ? cs.l18n('confirm-back') : cs.l18n('confirm-nope'); }
     },
     ConfirmWarn: {
@@ -4180,7 +3893,7 @@ module.exports = Mn.ItemView.extend({
   },
 
   serializeData: function( ) {
-    var data = _.extend( Mn.ItemView.prototype.serializeData.apply(this,arguments), {
+    var data = _.extend( CS.Mn.ItemView.prototype.serializeData.apply(this,arguments), {
       actions: this.actions
     });
 
@@ -4192,16 +3905,16 @@ module.exports = Mn.ItemView.extend({
   },
 
   mouseOver: function( e ) {
-    this.model.trigger('observe:in');
+    this.model.trigger('observe:start');
   },
 
   mouseOut: function( e ) {
-    this.model.trigger('observe:out');
+    this.model.trigger('observe:end');
   },
 
 });
-},{}],74:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],64:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'sortable',
 	childViewContainer: 'ul',
 
@@ -4240,7 +3953,7 @@ module.exports = cs.ControlViews.Base.extend({
     return view;
   },
 
-	emptyView: Mn.ItemView.extend({
+	emptyView: CS.Mn.ItemView.extend({
   	tagName: 'li',
   	className: 'sortable-item empty',
   	template: 'controls/sortable-empty',
@@ -4296,9 +4009,9 @@ module.exports = cs.ControlViews.Base.extend({
 
   onProxyReady: function() {
 
-    var itemHandle = 'elements'; // this.model.get( 'name' ) || 'elements';
+    this.collection = this.proxy.elements;
 
-    this.options.collection = this.collection = this.proxy.get( itemHandle );
+    this.listenTo( this.collection, 'reset', this.render );
     this.listenTo( this.collection, 'sort', this.render );
     this.listenTo( this.collection, 'remove', this.render );
     this.listenTo( this.collection, 'add', this.render );
@@ -4319,19 +4032,28 @@ module.exports = cs.ControlViews.Base.extend({
     if ( item.atCap() ) {
       item.trigger('confirm:warn:open');
     } else {
-      item.model.collection.duplicate( item.model );
+    	cs.elements.trigger( 'duplicate', item.model );
     }
   },
 
   // Default handle is to sub-inspect
   onChildviewClickHandle: function( item ) {
-  	cs.channel.trigger( 'inspect:sub:element', { model: item.model, autoFocus: 'title' } );
-  	cs.navigate.trigger( 'sub:inspector' );
+  	cs.events.trigger( 'inspect:child:element', item.model );
+    var pane = ( cs.navigate.request('active:pane') == 'settings' ) ? 'settings' : 'inspector';
+    cs.navigate.trigger( pane + ':item' );
   },
 
   // Default confirmation is to delete
   onChildviewConfirmAccept: function( item ) {
-    cs.channel.trigger( 'element:delete', { model: item.model } );
+  	var atFloor = item.atFloor()
+
+  	this.triggerMethod( 'remove:item', item.model );
+  	cs.elements.trigger( 'delete', { model: item.model } );
+
+  	if ( atFloor ) {
+  		this.addItem();
+  		this.triggerMethod( 'reset:last:item' );
+  	}
   },
 
 	onRender: function() {
@@ -4341,15 +4063,13 @@ module.exports = cs.ControlViews.Base.extend({
 
   addItem:function() {
   	var options = this.model.get('options');
-    var stringTemplate = options.newTitle || cs.l18n('sortable-default');
-  	var item = { title: stringTemplate.replace('%s', ( this.collection.length + 1 ) ) }
-    //if (options.type) item.type = options.type;
-    this.collection.create( item );
+    var title = options.newTitle || cs.l18n('sortable-default');
+    cs.elements.trigger( 'add:item', options.element, this.proxy, title, options.title_field );
   },
 
 });
-},{"./sortable-item":73,"./sortable-item-wide":72}],75:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{"./sortable-item":63,"./sortable-item-wide":62}],65:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'text',
 	bindingSelector: 'input[type=text]',
 	controlEvents: {
@@ -4361,8 +4081,8 @@ module.exports = cs.ControlViews.Base.extend({
 			this.$('input[type=text]').attr('placeholder', options.placeholder );
 	}
 });
-},{}],76:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],66:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'textarea',
 	bindingSelector: 'textarea',
   onProxyReady: function() {
@@ -4378,8 +4098,8 @@ module.exports = cs.ControlViews.Base.extend({
       this.$('textarea').attr('placeholder', options.placeholder );
   }
 });
-},{}],77:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],67:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'title',
 	divider: true,
 	canCompact: false,
@@ -4393,16 +4113,14 @@ module.exports = cs.ControlViews.Base.extend({
     'click @ui.inspect': 'inspect',
   },
 
-	controlData: function() {
-		return { showButton: this.model.get('showInspectButton') || false };
-	},
-
 	onInspect: function() {
-    cs.navigate.trigger( 'inspector', { model: this.model } );
-  },
+		cs.events.trigger( 'inspect:element', this.proxy.getSource() );
+		cs.navigate.trigger( 'inspector:home' );
+  }
+
 });
-},{}],78:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],68:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'toggle',
   binding: {
     initialize: function($el, model, options) {
@@ -4431,8 +4149,8 @@ module.exports = cs.ControlViews.Base.extend({
     }
   }
 })
-},{}],79:[function(require,module,exports){
-module.exports = cs.ControlViews.Base.extend({
+},{}],69:[function(require,module,exports){
+module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'wpselect',
 	bindingSelector: 'select',
 	controlEvents: {
@@ -4445,57 +4163,7 @@ module.exports = cs.ControlViews.Base.extend({
 		this.$( '.cs-wp-select' ).append( this.$select );
 	}
 });
-},{}],80:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-
-	toggle: function( e ) {
-
-		var href
-		var $this   = this.$(e.target)
-		var $target = this.$( $this.attr('data-target') || e.preventDefault() || $this.attr('href') )
-		var data    = $target.data('bs.collapse')
-		var option  = data ? 'toggle' : $this.data()
-		var parent  = $this.attr('data-parent')
-		var $parent = parent && this.$(parent)
-
-		if (!data || !data.transitioning) {
-		if ($parent) $parent.find('[data-toggle="collapse"][data-parent="' + parent + '"]').not($this).addClass('collapsed')
-			$this[$target.hasClass('in') ? 'addClass' : 'removeClass']('collapsed')
-		}
-
-		jQuery.fn.collapse.call($target, option)
-
-	},
-
-	onClickBeforeInspect: function( e ) {
-		if ( e.target.className.indexOf('x-accordion-toggle') >= 0 ) {
-			this.toggle(e);
-		}
-	},
-
-});
-},{}],81:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-alert .h-alert': 'heading',
-		'.x-alert': 'content'
-	},
-
-	elementEvents: {
-		'click button.close' : 'closeButton'
-	},
-
-	closeButton: function( e ) {
-		e.preventDefault();
-	}
-});
-},{}],82:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-author-box': 'heading'
-	}
-});
-},{}],83:[function(require,module,exports){
+},{}],70:[function(require,module,exports){
 var BaseShared = {
 	template: 'loading',
 	className: 'cs-preview-element-wrapper',
@@ -4644,1071 +4312,27 @@ var BaseShared = {
 }
 
 
-module.exports.BaseCore = Mn.CollectionView.extend( _.extend( BaseShared, {
+module.exports.BaseCore = CS.Mn.CollectionView.extend( _.extend( BaseShared, {
 
 	constructor: function( options ) {
-		Mn.CollectionView.apply(this, arguments);
+		CS.Mn.CollectionView.apply(this, arguments);
 		this.construct();
 	},
 
 } ) );
 
 
-module.exports.Base = Mn.CompositeView.extend( _.extend( BaseShared, {
+module.exports.Base = CS.Mn.CompositeView.extend( _.extend( BaseShared, {
 
 	constructor: function( options ) {
-		Mn.CompositeView.apply(this, arguments);
+		CS.Mn.CompositeView.apply(this, arguments);
 		this.construct();
 	},
 
 } ) );
-},{}],84:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-blockquote .x-cite': 'cite',
-		'.x-blockquote': 'content'
-	}
-});
-},{}],85:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-btn': 'content'
-	}
-});
-},{}],86:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.h-callout': 'heading',
-		'.p-callout': 'message',
-		'.x-btn': 'button_text'
-	}
-});
-},{}],87:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-face-outer.front .x-face-title': 'front_title',
-		'.x-face-outer.front .x-face-text': 'front_text',
-		'.x-face-outer.back .x-face-title': 'back_title',
-		'.x-face-outer.back .x-face-text': 'back_text',
-		'.x-face-outer.back .x-face-button': 'back_button_text'
-	},
-	onAfterElementRender: function() {
-
-    //this.model.markupCache = this.$el.html();
-    _.defer( _.bind( function(){
-    	this.$('.x-card-outer').trigger('cs:setcardheight')
-    }, this ) );
-
-	}
-});
-},{}],88:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-code': 'content'
-	}
-});
-},{}],89:[function(require,module,exports){
-module.exports = Mn.CollectionView.extend({
-
-	emptyView: Mn.ItemView.extend({
-		className: 'cs-empty-column',
-		template: 'empty-column',
-	}),
-
-	getChildView: function( item ) { return cs.elementLookup( item.get('elType') ); },
-
-	sort:false,
-  remoteRender: false,
-	events: {
-		'click svg.cs-custom-icon': 'clickIcon',
-		'drop.h5s': 'receiveElement',
-		'dragenter.h5s': 'dragEnter',
-		'dragover.h5s': 'dragOver',
-		'mouseover': 'mouseOver',
-		'mouseout': 'mouseOut',
-		'click': 'click'
-	},
-
-	initialize: function() {
-
-		this.checkDragOverStart = _.once( this.dragOverStart );
-		this.checkDragLeave = _.debounce( this.dragLeave, 50 );
-		this.throttleSetDragIndicator = _.throttle( _.bind( this.setDragIndicator, this ), 125, { leading: false, trailing: false } );
-		this.localIndex = null;
-		this.dropIndex = 0;
-		this.collection = this.model.get('elements')
-		this.listenTo( this.collection, 'sort', this.render );
-		this.listenTo( this.model, 'change', this.render );
-		this.listenTo( this.model, 'change', function() {
-			this.once( 'fade', this.fade );
-			this.render();
-		} );
-		this.once( 'fade', this.fade );
-
-    this.listenTo( this.model, 'observe:in', this.observeIn );
-    this.listenTo( this.model, 'observe:out', this.observeOut );
-
-		this.listenTo( cs.observer, 'kill:indicator', function() {
-			cs.$indicator.detach();
-		});
-
-		this.emptyElementView = new this.emptyView();
-		this.emptyElementView.render();
-	},
-
-	emptyClassCheck: function( on ) {
-		this.emptyElementView.$el.detach();
-		if ( on && this.collection.length <= 1) {
-			this.$el.append(this.emptyElementView.$el);
-		}
-		this.$el.toggleClass( 'cs-empty', ( this.collection.isEmpty() || ( on || false ) ) );
-	},
-
-  onChildviewDragStart: function( child ) {
-
-  	cs.preview.trigger( 'dragging', true );
-    cs.observer.trigger( 'kill' );
-
-  	this.localIndex = this.collection.indexOf(child.model);
-
-  	if ( _.isNull( this.localIndex ) && this.collection.length != 1 ) {
-  		child.$el.before(cs.$indicator);
-  	}
-
-  	cs.$indicator.css({
-  		height: child.$el.outerHeight()
-  	});
-
-  	child.$el.toggleClass( 'cs-dragging', true );
-  	this.emptyClassCheck( true );
-
-  },
-
-  onChildviewDragEnd: function( child ) {
-  	child.$el.toggleClass( 'cs-dragging', false );
-  	cs.observer.trigger('kill:indicator');
-  	//console.log('end', this.localIndex, this.children.length )
-  	if (this.localIndex == this.children.length - 1 ) {
-  		this.$el.append(child.$el);
-  	} else {
-  		this.$el.children().eq(this.localIndex).before(child.$el);
-  	}
-  	this.emptyClassCheck();
-
-  },
-
-  onRemoveChild: function( ) {
-  	this.localIndex = null;
-  	this.emptyClassCheck();
-  },
-
-  fade: function() {
-  	var fade, animation, offset, style;
-
-  	fade = this.model.get('fade');
-
-
-  	if (fade) {
-
-  		animation = this.model.get('fade_animation');
-  		offset = this.model.get('fade_animation_offset');
-
-  		style = { opacity: 0 };
-
-			switch ( animation ) {
-				case 'in-from-top':
-					style.top = '-' + offset;
-					break;
-				case 'in-from-left':
-					style.left = '-' + offset;
-					break;
-				case 'in-from-bottom':
-					style.bottom = '-' + offset;
-					break;
-				case 'in-from-right':
-					style.right = '-' + offset;
-					break;
-			}
-
-			this.$el.css(style);
-  		if ( _.isFunction( callback = window.xData.base.lookupCallback('column') ) ) {
-      callback.call( this.$el, {
-	  		fade: fade,
-	  		animation: animation,
-        duration: parseInt( this.model.get('fade_duration') )
-	  	});
-    }
-  	}
-
-
-  },
-
-	onRender: function() {
-
-		var classes, styles, customID, padding, borderWidth, bgColor, customStyle;
-
-		classes = [ 'x-column', 'x-sm' ];
-		styles = {};
-
-		customID = this.model.get('custom_id');
-		if (customID) this.$el.attr( 'id', customID );
-
-		if (textAlign = this.model.get('text_align')) {
-			classes.push(textAlign);
-		}
-
-		classes.push( 'x-' + this.model.get('size').replace('/','-') );
-		classes.push( this.model.get('class') );
-
-		this.$el.attr('class', classes.join(' '));
-
-
-		if ( _.isArray( padding = _.clone( this.model.get('padding') ) ) ) {
-			padding.pop();
-			styles['padding'] = padding.join(' ');
-		}
-
-		if ( _.isArray( borderWidth = _.clone( this.model.get('border') ) ) ) {
-			borderWidth.pop();
-			if ( _.unique(borderWidth) != '0px' ) {
-				styles['border-width'] = borderWidth.join(' ');
-				styles['border-color'] = this.model.get('border_color');
-				styles['border-style'] = this.model.get('border_style');
-			}
-		}
-
-		bgColor = this.model.get('bg_color');
-		styles['background-color'] = (bgColor) ? bgColor : 'transparent';
-
-		this.$el.removeAttr('style');
-		this.$el.css(styles);
-
-		if ( typeof (customStyle = this.model.get('style')) == 'string' ) {
-			this.$el.attr('style', this.$el.attr('style') + customStyle );
-		}
-
-		cs.$indicator.detach();
-		this.emptyClassCheck();
-		this.trigger('fade');
-	},
-
-	dragOverStart: function( ) {
-		// this.receivingTimeout = setTimeout(_.bind( function(){
-
-		// },this ), 20 );
-		this.$el.toggleClass( 'cs-receiving', true );
-		cs.observer.trigger( 'in', this, true );
-	},
-
-	dragEnter: function() {
-		this.checkDragOverStart();
-		this.checkDragLeave();
-	},
-
-	dragOver: function(e) {
-
-		this.checkDragOverStart();
-		this.checkDragLeave();
-
-
-
-    if (e.originalEvent.preventDefault)
-      e.originalEvent.preventDefault();
-
-    e.originalEvent.dataTransfer.dropEffect = 'copy';
-
-
-
-    if (this.collection.length > 0 ) {
-    	this.throttleSetDragIndicator( e.originalEvent.pageY );
-    }
-
-
-
-	},
-
-	dragLeave: function () {
-		this.$el.toggleClass( 'cs-receiving', false );
-		this.checkDragOverStart = _.once( this.dragOverStart );
-		cs.observer.trigger( 'out', this );
-		cs.$indicator.detach();
-	},
-
-	mouseOver: function ( e ) {
-		e.stopPropagation();
-		this.model.trigger('observe:in');
-	},
-
-	mouseOut: function ( e ) {
-		this.model.trigger('observe:out');
-	},
-
-  observeIn: function() {
-    cs.observer.trigger( 'in', this );
-  },
-
-  observeOut: function() {
-    cs.observer.trigger( 'out', this );
-  },
-
-
-	receiveElement: function ( e ) {
-
-		this.emptyClassCheck();
-		cs.observer.trigger('kill:indicator');
-		this.$el.toggleClass( 'cs-receiving', false );
-		this.localIndex = null;
-
-    cs.observer.trigger( 'kill');
-    cs.preview.trigger( 'dragging', false );
-
-		var data = JSON.parse( e.originalEvent.dataTransfer.getData('cornerstone/element') );
-		if ( !data ) return;
-
-    if ( data.action == 'create' && data.elType ) {
-    	this.model.trigger( 'create:element', data.elType, this.dropIndex );
-      return;
-    }
-
-
-    if ( data.action =='move' && data.id ) {
-
-    	var model = cs.preview.request( 'cache:'+ data.id );
-
-    	if ( this.collection.get({ cid: data.id }) ) {
-    		this.collection.trigger( 'update:position', model, this.dropIndex );
-      	return;
-    	}
-
-    	model.destroy();
-    	this.model.trigger( 'receive:element', model.toJSON(), this.dropIndex, model.markupCache );
-    	this.render();
-    }
-
-    this.dropIndex = 0;
-
-	},
-
-	click: function( e ) {
-		e.stopPropagation();
-		this.model.trigger('inspect');
-	},
-
-	clickIcon: function( e ) {
-		e.stopPropagation();
-		this.model.trigger('nav:kylelements');
-	},
-
-	setDragIndicator: function( y ) {
-		cs.observer.trigger('kill:indicator');
-		this.findDropIndex( y );
-  	this.renderIndicator();
-	},
-
-	findDropIndex: function( y ) {
-
-		var model = this.findClosest( y );
-		var index;
-		if ( _.isNull(model) ) {
-			index = this.collection.length;
-		} else {
-			index = this.collection.indexOf( model );
-		}
-
-		if ( this.localIndex && index > this.localIndex || this.localIndex == 0 )
-  		index--;
-
-  	//console.log(index);
-
-  	this.dropIndex = index;
-
-  	// Don't modify position if we're working with the same element.
-  	// if ( this.localIndex == index ) {
-  	// 	this.dropIndex = this.localIndex;
-  	// 	//console.log( 0, this.localIndex, this.dropIndex, this.collection.length, index, 'SHORT1' );
-  	// 	return;
-  	// }
-
-  	// We're hovering over another element, so we need to determine which side to drop on
-
-		// Drop above by default. We need to decrement the index if the source is in the same column
-  	// if ( this.localIndex && index > this.localIndex || this.localIndex == 0 )
-  	// 	index--;
-
-  	// // The first element can't move to "above" the second element
-  	// if (this.localIndex == 0 && index == 1 && !below ) {
-  	// 	this.dropIndex = 0;
-  	// 	//console.log( 0, this.localIndex, this.dropIndex, this.collection.length, index, 'SHORT2' );
-  	// 	return;
-  	// }
-
-  	// this.dropIndex = ( below ) ? index + 1 : index;
-
-  	//console.log( 0, this.localIndex, this.dropIndex, this.collection.length, index );
-	},
-
-	renderIndicator: function() {
-
-		if ( !_.isNull( this.localIndex ) && this.collection.length == 1 )
-			return;
-
-		//console.log(this.dropIndex);
-		if (this.dropIndex == 0 ) {
-			this.$el.prepend(cs.$indicator);
-			return;
-		}
-
-		if (this.dropIndex == ( ( _.isNull( this.localIndex ) ) ? this.collection.length : this.collection.length - 1 ) ) {
-			this.$el.append(cs.$indicator);
-  	} else {
-  		if ( _.isNull( this.localIndex ) || this.localIndex > this.dropIndex ) {
-				this.children.findByModel( this.collection.at( this.dropIndex ) ).$el.before(cs.$indicator);
-			} else {
-				this.children.findByModel( this.collection.at( this.dropIndex + 1 ) ).$el.before(cs.$indicator);
-			}
-
-  	}
-	},
-
-	findClosest: function( y ) {
-
-		var columnBottom = this.$el.offset().top + this.$el.outerHeight();
-		var top = this.$el.offset().top, bottom = 0, closest = null, prev = null, view = null;
-
-		if ( this.collection.length == 1 ) {
-			bottom = columnBottom;
-			if ( y >= top && y <= bottom ) {
-        if (y > ( top + ( bottom - top ) / 2 ) ) {
-        	return null;
-        } else {
-        	return this.collection.first();
-        }
-      }
-		}
-
-    this.collection.each( _.bind( function( model, index ) {
-
-    	view = this.children.findByModel( model );
-    	if (view.$el.hasClass('cs-dragging')) {
-    		return;
-    	}
-
-  		bottom = view.$el.offset().top + ( view.$el.outerHeight(true) / 2 ) + 45;
-
-      if ( y >= top && y <= bottom ) {
-        closest = model;
-      }
-
-      top = bottom;
-
-
-      // We have to check both directions on the last iteration
-      if ( index == this.collection.length - 1 ) {
-      	bottom = columnBottom;
-
-      	if ( y >= top && y <= bottom ) {
-	        closest = null; // out of bounds
-	      }
-      }
-
-    }, this ) );
-
-    return closest;
-
-	},
-
-	onAddChild: function( child ) {
-		child.triggerMethod('added:to:column');
-	}
-
-});
-},{}],90:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-columnize': 'content'
-	}
-});
-},{}],91:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.text-above': 'text_above',
-		'.text-below': 'text_below'
-	}
-});
-},{}],92:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-creative-cta': 'text'
-	}
-});
-},{}],93:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.h-custom-headline': 'content'
-	}
-});
-},{}],94:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.h-feature-headline': 'content'
-	}
-});
-},{}],95:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-
-	template: _.template('<div></div>'),
-	autoFocus: {
-		'.cs-gap': 'gap_size',
-	},
-
-	remoteRender: false,
-
-	minHeight: 3,
-
-	initialize: function() {
-		this.listenTo( this.model, 'change', this.render );
-		this.boundWindowResize = _.bind( this.onAddedToColumn, this );
-		Backbone.$(window).on( 'resize', this.boundWindowResize );
-	},
-
-	onDestroy: function() {
-		Backbone.$(window).off( 'resize', this.boundWindowResize );
-	},
-
-	onRender: function() {
-
-		var classes, styles, visibility, customID, customStyle, size;
-		$gap = this.$('div');
-
-		classes = [ 'cs-empty-element', 'cs-gap' ];
-		styles = {};
-
-		if (visibility = this.model.get('visibility')) {
-			classes = _.union( classes, visibility );
-		}
-
-		classes.push(this.model.get('class'))
-		$gap.attr('class', classes.join(' '));
-
-		customID = this.model.get('custom_id');
-		if (customID) $gap.attr( 'id', customID );
-
-		$gap.removeAttr('style');
-		$gap.css(styles);
-
-		customStyle = this.model.get('style');
-		if (customStyle) $gap.attr('style', $gap.attr('style') + customStyle );
-
-		size = this.model.get('gap_size');
-
-		$gap.css({
-			'padding' : size + ' 0 0',
-			'margin'  : 0,
-			'height'  : 0
-		});
-
-		if ($gap.outerHeight() < this.minHeight) {
-			$gap.css({'padding' : this.minHeight + 'px 0 0'});
-		}
-
-	},
-
-	onAddedToColumn: function() {
-
-		// Wait until other child views are rendered
-		_.defer( _.bind( function(){
-
-			$gap = this.$('div');
-
-			var size = this.model.get('gap_size');
-
-			$gap.css({
-				'padding' : size + ' 0 0',
-				'margin'  : 0,
-				'height'  : 0
-			});
-
-			if ($gap.outerHeight() < this.minHeight) {
-				$gap.css({'padding' : this.minHeight + 'px 0 0'});
-			}
-		}, this ) );
-
-	}
-
-});
-},{}],96:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	onAfterElementRender: function(){
-
-		if( this.model.prevHeight ) {
-			this.$('.cs-empty-element').height(this.model.prevHeight);
-			this.model.prevHeight = false;
-		}
-
-		_.defer(_.bind( function() {
-
-			$map = this.$('.x-map');
-			if ($map.length > 0) {
-				this.model.prevHeight = $map.outerHeight();
-			}
-
-		}, this ) );
-
-		this.model.markupCache = '';
-	}
-});
-},{}],97:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-
-	onAfterElementRender: function() {
-
-	}
-
-});
-},{}],98:[function(require,module,exports){
-module.exports = {
-  'accordion'         : require('./accordion'),
-  'alert'             : require('./alert'),
-  'author'            : require('./author'),
-//'block-grid'        : require('./block-grid'),
-  'blockquote'        : require('./blockquote'),
-  'button'            : require('./button'),
-  'callout'           : require('./callout'),
-  'card'              : require('./card'),
-//'clear'             : require('./clear'),
-  'code'              : require('./code'),
-  'column'            : require('./column'),
-  'columnize'         : require('./columnize'),
-	'row'               : require('./row'),
-  'counter'           : require('./counter'),
-  'creative-cta'      : require('./creative-cta'),
-  'custom-headline'   : require('./custom-headline'),
-//'embedded-audio'    : require('./embedded-audio'),
-//'embedded-video'    : require('./embedded-video'),
-  'feature-headline'  : require('./feature-headline'),
-  'gap'               : require('./gap'),
-  'google-map'        : require('./google-map'),
-//'icon-list'         : require('./icon-list'),
-//'image'             : require('./image'),
-  'line'              : require('./line'),
-//'map-embed'         : require('./map-embed'),
-//'pricing-table'     : require('./pricing-table'),
-  'promo'             : require('./promo'),
-  'prompt'            : require('./prompt'),
-//'protect'           : require('./protect'),
-  'pullquote'         : require('./pullquote'),
-//'recent-posts'      : require('./recent-posts'),
-//'search'            : require('./search'),
-//'self-hosted-audio' : require('./self-hosted-audio'),
-//'self-hosted-video' : require('./self-hosted-video'),
-  'skill-bar'         : require('./skill-bar'),
-  'slider'            : require('./slider'),
-  'social-sharing'    : require('./social-sharing'),
-  'tabs'              : require('./tabs'),
-  'text-type'         : require('./text-type'),
-  'text'              : require('./text'),
-
-  //3rd party
-  'gravity-forms'     : require('./gravity-forms'),
-}
-},{"./accordion":80,"./alert":81,"./author":82,"./blockquote":84,"./button":85,"./callout":86,"./card":87,"./code":88,"./column":89,"./columnize":90,"./counter":91,"./creative-cta":92,"./custom-headline":93,"./feature-headline":94,"./gap":95,"./google-map":96,"./gravity-forms":97,"./line":99,"./promo":100,"./prompt":101,"./pullquote":102,"./row":103,"./skill-bar":105,"./slider":106,"./social-sharing":107,"./tabs":108,"./text":110,"./text-type":109}],99:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-
-  template: _.template('<hr class="x-hr">'),
-  remoteRender: false,
-
-  onRender: function() {
-
-    var $line, classes, styles, visibility, customID, customStyle;
-    $line = this.$('hr');
-
-    classes = [ 'x-hr' ];
-    styles = {};
-
-    if (visibility = this.model.get('visibility')) {
-      classes = _.union( classes, visibility );
-    }
-
-    classes.push(this.model.get('class'))
-    $line.attr('class', classes.join(' '));
-
-    customID = this.model.get('custom_id');
-    if (customID) $line.attr( 'id', customID );
-
-    $line.removeAttr('style');
-    $line.css(styles);
-
-    customStyle = this.model.get('style');
-    if (customStyle) $line.attr('style', $line.attr('style') + customStyle );
-
-    // Replace margin with padding after this first render
-    // This helps make the line clickable in the preview window
-    _.defer(function(){
-
-      $line.css({
-        'paddingBottom' : $line.css('marginBottom'),
-        'marginBottom' : '0'
-      });
-
-    })
-
-
-  },
-
-});
-},{}],100:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-promo-content': 'content'
-	}
-});
-},{}],101:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.h-prompt': 'heading',
-		'.p-prompt': 'message',
-		'.x-btn': 'button_text'
-	}
-});
-},{}],102:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-pullquote .x-cite': 'cite',
-		'.x-pullquote': 'content'
-	}
-});
-},{}],103:[function(require,module,exports){
-module.exports = cs.ElementViews.BaseCore.extend( {
-
-	childView: require('./column'),
-	attributes: {},
-	baseEvents: {
-		'mouseover': 'mouseOver',
-		'mouseout': 'mouseOut',
-	},
-
-	remoteRender: false,
-
-	initialize: function() {
-
-		this.collection = this.model.get('elements')
-		this.listenTo( this.collection, 'sort', this.render );
-		this.listenTo( this.model, 'change', this.render );
-
-	},
-
-	filter: function (child, index, collection) {
-    return ( child.get('active') );
-  },
-
-	serializeData: function() {
-		var data = _.extend( Mn.CompositeView.prototype.serializeData.apply(this,arguments), this.elementData() );
-		return data;
-	},
-
-	onRender: function() {
-
-		var classes, styles, visibility, textAlign, padding, margin, borderWidth, bgColor, customStyle, customID;
-
-		classes = [ 'x-container' ];
-		styles = {};
-
-		if ( this.model.get('inner_container') ) {
-			classes.push('max width')
-		}
-
-		if (visibility = this.model.get('visibility')) {
-			classes = _.union( classes, visibility );
-		}
-
-		if (textAlign = this.model.get('text_align')) {
-			classes.push(textAlign);
-		}
-
-		if ( this.model.get('marginless_columns') == true ) classes.push('marginless-columns');
-
-		if ( _.isArray( padding = _.clone( this.model.get('padding') ) ) ) {
-			padding.pop();
-			styles['padding'] = padding.join(' ');
-		}
-
-		if ( _.isArray( margin = _.clone( this.model.get('margin') ) ) ) {
-			margin.pop();
-			styles['margin'] = margin.join(' ');
-		}
-
-		if ( _.isArray( borderWidth = _.clone( this.model.get('border') ) ) ) {
-			borderWidth.pop();
-			if ( _.unique(borderWidth) != '0px' ) {
-				styles['border-width'] = borderWidth.join(' ');
-				styles['border-color'] = this.model.get('border_color');
-				styles['border-style'] = this.model.get('border_style');
-			}
-		}
-
-		bgColor = this.model.get('bg_color')
-		styles['background-color'] = (bgColor) ? bgColor : 'transparent';
-
-
-		classes.push(this.model.get('class'))
-		this.$el.attr('class', classes.join(' '));
-		delete classes;
-
-		this.$el.removeAttr('style');
-		this.$el.css(styles);
-
-		if ( typeof (customStyle = this.model.get('style')) == 'string' ) {
-			this.$el.attr('style', this.$el.attr('style') + customStyle );
-		}
-
-		if ( typeof ( customID = this.model.get('custom_id') ) == 'string' ) {
-			this.$el.attr( 'id', customID );
-		}
-
-	}
-
-} );
-},{"./column":89}],104:[function(require,module,exports){
-module.exports = cs.ElementViews.BaseCore.extend( {
-
-	childView: require('./row'),
-	attributes: {},
-	baseEvents: {
-		'mouseover': 'mouseOver',
-		'mouseout': 'mouseOut',
-	},
-
-	remoteRender: false,
-
-	initialize: function() {
-
-		this.lazyDetectColorContrast = _.debounce( _.bind( this.detectColorContrast, this ), 25 );
-		this.lazyDetectImageContrast = _.debounce( _.bind( this.detectImageContrast, this ), 250 );
-
-		this.rowIndex = this.model.collection.indexOf( this.model ) + 1;
-		this.collection = this.model.get('elements')
-		this.listenTo( this.collection, 'sort', this.render );
-		this.listenTo( this.model, 'change', this.render );
-		this.contrast = {
-			color: null,
-			image: null,
-			activeClass: null
-		}
-
-		this.listenTo( this.model, 'change:bg_color', function() {
-			this.contrast.color = null;
-		} );
-
-		this.listenTo( this.model, 'change:bg_image', function(model, value) {
-			this.contrast.image = null;
-		} );
-
-	},
-
-	serializeData: function() {
-		return _.extend( Mn.CompositeView.prototype.serializeData.apply(this,arguments), this.elementData() );
-	},
-
-	onRender: function() {
-
-		var classes, styles, bgClass, bgColor, visibility, textAlign, padding, margin, borderWidth, customStyle, customID;
-
-		this.$el.attr('id', 'x-section-' + this.rowIndex );
-
-		classes = [ 'x-section' ];
-		styles = {};
-		bgClass = '';
-		bgColor = this.model.get('bg_color');
-
-		if (this.contrastClass) {
-			classes.push(this.contrastClass);
-		}
-
-		if (visibility = this.model.get('visibility')) {
-			classes = _.union( classes, visibility );
-		}
-
-		if (textAlign = this.model.get('text_align')) {
-			classes.push(textAlign);
-		}
-
-		if ( this.model.get('marginless_columns') == true ) classes.push('marginless-columns');
-
-
-
-		switch (this.model.get('bg_type')) {
-			case 'video':
-				bgClass = 'bg-video';
-				break;
-			case 'image':
-
-				// Set Background class
-				bgClass = ( this.model.get( 'bg_pattern_toggle' ) ) ? 'bg-pattern' : 'bg-image';
-
-				if ( this.model.get( 'parallax' ) ) classes.push( 'parallax' );
-
-				var image = this.model.get('bg_image');
-				if (image) styles['backgroundImage'] = 'url("' + image +'")';
-
-				styles['background-color'] = (bgColor) ? bgColor : 'transparent';
-
-				if ( _.isNull( this.contrast.image ) ) {
-					this.lazyDetectImageContrast();
-				}
-				if ( !_.isNull( this.contrast.activeClass) ) classes.push(this.contrast.activeClass);
-
-				break;
-			case 'color':
-				bgClass = 'bg-color';
-				styles['background-color'] = (bgColor) ? bgColor : 'transparent';
-				if ( _.isNull( this.contrast.image ) ) {
-					this.lazyDetectColorContrast();
-				}
-				if ( !_.isNull( this.contrast.activeClass) ) classes.push(this.contrast.activeClass);
-
-				break;
-
-		}
-
-		if ( bgClass ) classes.push(bgClass);
-
-		if ( _.isArray( padding = _.clone( this.model.get('padding') ) ) ) {
-			padding.pop();
-			styles['padding'] = padding.join(' ');
-		}
-
-		if ( _.isArray( margin = _.clone( this.model.get('margin') ) ) ) {
-			margin.pop();
-			styles['margin'] = margin.join(' ');
-		}
-
-		if ( _.isArray( borderWidth = _.clone( this.model.get('border') ) ) ) {
-			borderWidth.pop();
-			if ( _.unique(borderWidth) != '0px' ) {
-				styles['border-width'] = borderWidth.join(' ');
-				styles['border-color'] = this.model.get('border_color');
-				styles['border-style'] = this.model.get('border_style');
-			}
-		}
-
-
-		classes.push(this.model.get('class'))
-		this.$el.attr('class', classes.join(' '));
-		delete classes;
-		this.$el.removeAttr('style');
-		this.$el.css(styles);
-
-		if ( typeof (customStyle = this.model.get('style')) == 'string' ) {
-			this.$el.attr('style', this.$el.attr('style') + customStyle );
-		}
-
-		if ( typeof ( customID = this.model.get('custom_id') ) == 'string' ) {
-			this.$el.attr( 'id', customID );
-		}
-
-		// Defer things that may depend on height.
-		_.defer( _.bind( function(){
-			if ( this.$el.hasClass('parallax') ) {
-		    if ( Modernizr && Modernizr.touchevents ) {
-		      this.$el.css('background-attachment', 'scroll');
-		    } else {
-		      if ( this.$el.hasClass('bg-image')   ) speed = 0.1;
-		      if ( this.$el.hasClass('bg-pattern') ) speed = 0.3;
-		      if ( speed ) this.$el.parallaxContentBand('50%', speed);
-		    }
-		  }
-
-		  if ( this.$el.hasClass('bg-video') ) {
-		  	this.$el.css({
-		  		'background-image': 'url("' + this.model.get('bg_video_poster') +'")',
-		  		'background-color': 'white',
-		  		'background-size':  'cover'
-		  	});
-		  }
-	  }, this ) );
-
-	},
-
-	detectImageContrast: function() {
-		_.defer( _.bind( function(){
-			var image = this.model.get('bg_image');
-			if ( !image || image == '' ) {
-				this.detectColorContrast();
-				return;
-			}
-
-      window.RGBaster.colors( image, {
-			  success: _.bind( function(payload) {
-			    this.setContrastClass( payload.dominant );
-			  }, this )
-			});
-
-    }, this ) );
-	},
-
-	detectColorContrast: function( ) {
-		var color = this.model.get('bg_color');
-		if (!color || color == '')
-			color = '#ffffff';
-		this.setContrastClass( color );
-	},
-
-	setContrastClass:function( color ) {
-		var source = new ColorLib( color );
-		var isDark = ( source.getDistanceLuminosityFrom( new ColorLib( '#fff' ) ) > 10.5 );
-		this.contrast.activeClass = ( isDark ) ? 'cs-bg-dark' : null;
-		this.$el.toggleClass( 'cs-bg-dark', isDark );
-	}
-
-
-} );
-},{"./row":103}],105:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.h-skill-bar': 'heading',
-		'.x-skill-bar': 'bar_text'
-	}
-});
-},{}],106:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	emptyDetection: function() {
-    // Prevent empty detection
-  }
-});
-},{}],107:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-entry-share': 'heading'
-	}
-});
-},{}],108:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-
-	onClickBeforeInspect: function( e ) {
-		$target = jQuery(e.target);
-		if ( $target.attr('data-toggle') == 'tab' ) {
-			jQuery.fn.tab.call( $target, 'show');
-		}
-	},
-
-});
-},{}],109:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-text-type .prefix': 'prefix',
-		'.x-text-type .text': 'strings',
-		'.x-text-type .suffix': 'suffix'
-	}
-});
-},{}],110:[function(require,module,exports){
-module.exports = cs.ElementViews.Base.extend({
-	autoFocus: {
-		'.x-text': 'content'
-	}
-});
-},{}],111:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 // Confirm
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   className: 'cs-confirm',
   template: 'extra/confirm',
 
@@ -5726,6 +4350,7 @@ module.exports = Mn.ItemView.extend({
     this.acceptDebounce = _.debounce( _.bind( this.accept, this ), 500, true );
     this.declineDebounce = _.debounce( _.bind( this.decline, this ), 500, true );
 
+    this.listenTo( cs.confirm, 'abort', this.declineDebounce );
   },
 
   onOpen: function( data ) {
@@ -5766,14 +4391,17 @@ module.exports = Mn.ItemView.extend({
   },
 
   decline: function() {
-    cs.confirm.trigger( 'decline', this.data.view.cid );
+  	var cid = null;
+  	if ( this.data.view && this.data.view.cid )
+  		cid = this.data.view.cid
+    cs.confirm.trigger( 'decline', cid );
     this.$el.removeClass('active');
   },
 
 });
-},{}],112:[function(require,module,exports){
+},{}],72:[function(require,module,exports){
 // Expand
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   tagName: 'button',
   className: 'expand cs-icon',
   template: false,
@@ -5793,7 +4421,7 @@ module.exports = Mn.ItemView.extend({
     // Event propogation
     this.listenTo( cs.extra, 'set:collapse', function( state ){
       cs.extra.reply( 'get:collapse', state );
-      cs.preview.trigger( 'remote', 'set:collapse', state );
+       cs.global.trigger( 'set:collapse', state );
     });
 
   },
@@ -5806,12 +4434,11 @@ module.exports = Mn.ItemView.extend({
 
   }
 });
-},{}],113:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 // Expansion
 var ControlListView = require('../controls/control-collection')
-  , ControlCollection = require('../../data/models/control-collection');
 
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   className: 'cs-expanded-content-outer',
   template: 'extra/expanded-control',
 
@@ -5821,39 +4448,26 @@ module.exports = Mn.ItemView.extend({
   },
 
   initialize: function( options ) {
-    this.listenTo( cs.extra, 'expand:control', this.incoming );
     this.listenTo( cs.extra, 'set:collapse', this.collape );
-    this.controls = new ControlCollection( [], { proxy: null } );
-    this.controlView = new ControlListView( { collection: this.controls } );
     this.linkedView = null;
+    this.listenTo( cs.events, 'expand:control', this.open );
   },
 
   onRender: function() {
+  	this.controlView = new ControlListView( { collection: cs.component('inspector').getExpansionControls() } );
     this.controlView.render();
     this.$('.cs-expanded-content-inner').append(this.controlView.$el);
   },
 
-  incoming: function( view ) {
+  open: function() {
 
-    this.linkedView = view;
-
-    this.listenTo( this.linkedView, 'destroy', this.shutdown );
-
-    var clone = this.linkedView.model.toJSON();
-    clone.controlTooltip = null;
-
-    if ( clone.options && clone.options.expandable && clone.options.expandable !== true )
-      clone.controlTitle = clone.options.expandable;
-
-    this.controls.setProxy( this.linkedView.model.proxy );
-    this.controls.reset( [ clone ] );
-
-    this.controlView.render();
-    this.controlView.$el.removeClass('empty');
     this.$el.addClass('active');
 
-    // Enlarge and focus any textarea.
-    this.$('textarea').height( this.$el.height() * .60 ).focus();
+    // Enlarge any textarea.
+    _.defer( _.bind( function(){
+    	this.$('textarea').height( this.$el.height() * .60 ).focus();
+    }, this ) )
+
   },
 
   escape: function( e ) {
@@ -5870,27 +4484,17 @@ module.exports = Mn.ItemView.extend({
 
   shutdown: function() {
 
+  	cs.events.trigger( 'expand:close' );
+
     // Animate out
     this.$el.removeClass('active');
 
-    if (this.linkedView) {
-      this.stopListening( this.linkedView );
-      this.linkedView.triggerMethod('expand:close');
-    }
-
-    this.linkedView = null;
-
-    // Cleanup after animation
-    _.delay( _.bind( function(){
-      this.controls.reset();
-      this.controlView.render();
-    }, this ), 1000 );
   }
 
 });
-},{"../../data/models/control-collection":12,"../controls/control-collection":44}],114:[function(require,module,exports){
+},{"../controls/control-collection":36}],74:[function(require,module,exports){
 // Home
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   className: 'cs-home',
   template: 'extra/home',
 
@@ -5905,50 +4509,29 @@ module.exports = Mn.ItemView.extend({
     var data = {
       savedLastMessage: ( _.isNull( savedLast ) ) ? cs.l18n('home-unsaved') : cs.l18n('home-saved-last').replace('%s', savedLast.fromNow() ),
       savedLastClass: ( _.isNull( savedLast ) || savedLast.isBefore(new Date((new Date()).getTime() - minAgo*60000)) ) ? 'warn' : 'happy',
-      dashboardEditUrl: cs.config.request('dashboardEditUrl'),
-      frontEndUrl: cs.config.request('frontEndUrl')
+      dashboardEditUrl: cs.config('dashboardEditUrl'),
+      frontEndUrl: cs.config('frontEndUrl')
     }
     return data;
   }
 });
-},{}],115:[function(require,module,exports){
+},{}],75:[function(require,module,exports){
 // Options
-var ControlCollection = require('../../data/models/control-collection');
 
-module.exports = Mn.CompositeView.extend({
+module.exports = CS.Mn.CompositeView.extend({
   className: 'cs-options',
-  getChildView: function( item ) { return cs.controlLookup(item.get('controlType')); },
+  getChildView: function( item ) { return cs.controlLookup( item.get('type') ); },
   template: _.template('<div id="options-controls"><ul class="cs-controls"></ul></div>'),//'extra/options',
   childViewContainer: 'ul.cs-controls',
 
   initialize: function() {
-
-    this.collection = new ControlCollection([], { proxy: this.model } );
-
-    this.collection.add({
-      name: 'show_help_text',
-      controlType: 'toggle',
-      controlTitle: cs.l18n('options-help-text'),
-      options: { subText: cs.l18n('options-help-text-sub') },
-    });
-
-    this.collection.add({
-      name: 'show_adv_controls',
-      controlType: 'toggle',
-      controlTitle: cs.l18n('options-adv-controls'),
-      options: { subText: cs.l18n('options-adv-controls-sub') },
-    });
-
-    this.collection.each(function(item){
-      item.optionExempt = true;
-    });
-
+  	this.collection = cs.component('options').inspect.controls;
   }
 
 });
-},{"../../data/models/control-collection":12}],116:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 // Respond
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   className: 'cs-respond',
   template: 'extra/respond',
 
@@ -5992,9 +4575,9 @@ module.exports = Mn.ItemView.extend({
   }
 
 });
-},{}],117:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 // SaveComplete
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   className: 'cs-saved',
   template: 'extra/save-complete',
   messages: cs.l18n('save-complete-messages'),
@@ -6011,7 +4594,7 @@ module.exports = Mn.ItemView.extend({
 
   onSaveComplete: function() {
 
-    if ( cs.config.request('visualEnhancements') == 'false' ) {
+    if ( cs.config('visualEnhancements') == 'false' ) {
       cs.message.trigger( 'success', cs.l18n( 'save-complete-simple' ), 1250 );
       return;
     }
@@ -6031,287 +4614,187 @@ module.exports = Mn.ItemView.extend({
 
 });
 
-},{}],118:[function(require,module,exports){
-// InspectorPane
-
-var ControlListView = require('../controls/control-collection');
-var EmptyControls = Mn.ItemView.extend({
+},{}],78:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
   tagName: 'li',
-  template: 'inspector/blank-state'
+  className: 'cs-control-empty',
+  template: 'inspector/blank-state',
 });
+},{}],79:[function(require,module,exports){
+// InspectorPane
+var ControlListView = require('../controls/control-collection');
+var ViewBasePane = require('../main/base-pane');
+module.exports = ViewBasePane.extend({
 
-module.exports = Mn.LayoutView.extend({
-  className: 'cs-pane inspector active',
-  template: 'inspector/inspector',
-  regions: {
-    Sub: '#inspector-sub',
-    Controls: '#inspector-controls'
-  },
-
-  events: {
-    'click button.cs-builder-sub-back': 'closeSub',
-  },
+	name: 'inspector',
 
   initialize: function() {
-    this.listenTo(cs.navigate, 'inspector:heading', this.updateHeading );
-    this.listenTo(cs.navigate, 'sub:inspector', this.openSub )
-    //this.listenTo(cs.channel,  'inspect:nothing', this.render )
+    this.listenTo(cs.navigate, 'refresh:inspector:heading', this.updateHeading );
   },
 
-  onBeforeShow: function(){
+  onShowContent: function(){
 
-    this.Sub.empty();
-    this.Controls.empty();
-
-    var selected = cs.data.request('get:inspector');
-  	this.Controls.show( new ControlListView( _.extend( selected,
-      { emptyView: EmptyControls }
-    )));
+  	this.Content.show( new ControlListView( {
+  		collection: cs.component('inspector').getPrimaryControls(),
+  		emptyView: require('./empty-controls')
+  	}));
 
   },
 
-  closeSub: function() {
-    var selected = cs.data.request('get:inspector');
-
-    cs.navigate.reply('inspector:heading', selected.stub.get('title') );
-    cs.navigate.trigger('inspector:heading', selected.stub.get('title') );
-
-    this.$('.cs-builder-sub').removeClass('active');
-    this.subTimeout = setTimeout(_.bind(function(){
-      if ( this && this.Sub)
-        this.Sub.empty();
-    }, this), 3000);
+  updateHeading: function() {
+    this.$('h2').text( cs.navigate.request('inspector:heading') );
   },
 
-  updateHeading: function( text ) {
-    this.$('h2').text( (text) ? text : cs.l18n('inspector-heading') );
+  onOpenSubItem: function() {
+
+  	this.Sub.show( new ControlListView( {
+  		collection: cs.component('inspector').getSecondaryControls(),
+  		emptyView: require('./empty-controls')
+  	}));
+
   },
 
-  openSub: function( model ) {
-
-    cs.navigate.trigger( 'subpane:opened' );
-
-    clearTimeout(this.subTimeout);
-    var selected = cs.data.request('get:sub:inspector');
-    this.Sub.show( new ControlListView( {
-      collection: selected.collection,
-      autoFocus: selected.autoFocus,
-      element: selected.stub,
-      emptyView: EmptyControls,
-    } ) );
-    this.$('.cs-builder-sub').addClass('active').find('.cs-pane-content-inner').perfectScrollbar({
-      suppressScrollX     : true,
-      scrollYMarginOffset : 25
-    });
-  },
-
-  serializeData: function() {
-
+  updateSerializeData: function( data ) {
     var heading = cs.navigate.request('inspector:heading');
-
-    return _.extend( Mn.LayoutView.prototype.serializeData.apply( this, arguments ), {
-      heading: ( heading == false ) ? cs.l18n('inspector-heading') : heading
-    });
-
+    if ( heading )
+    	data.heading = heading;
+    return data;
   }
 
 });
-},{"../controls/control-collection":44}],119:[function(require,module,exports){
-// LayoutPane
-var ManageRowsView = require('./sub-row/layout-sub-rows')
-  , ControlListView = require('../controls/control-collection')
-  , TemplatesView = require('./sub-templates/layout-sub-templates');
+},{"../controls/control-collection":36,"../main/base-pane":86,"./empty-controls":78}],80:[function(require,module,exports){
+var ControlListView = require('../controls/control-collection')
+var ViewBasePane = require('../main/base-pane');
+module.exports = ViewBasePane.extend({
 
-module.exports = Mn.LayoutView.extend({
-  className: 'cs-pane layout active',
-  template: 'layout/layout',
+  name: 'layout',
 
-  regions: {
-    Sub: '#layout-sub',
-    Controls: '#layout-controls',
+  onShowContent: function(){
+    this.Content.show( new ControlListView( { collection: cs.component('layout').inspect.primary.controls } ) );
   },
 
-  events: {
-    'click button.cs-builder-sub-back': 'closeSub',
+  onOpenSubRows: function() {
+  	var ManageRowsView = require('./sub-row/layout-sub-rows');
+    this.Sub.show( new ControlListView( { collection: cs.component('layout').inspect.secondary.controls } ));
   },
 
-  initialize: function() {
-    this.listenTo( cs.navigate, 'layout:set:section', this.openSubRows )
-    this.listenTo( cs.navigate, 'layout:templates', this.openSubTemplates )
-  },
-
-  onBeforeShow: function(){
-    this.Sub.empty();
-    this.Controls.show( new ControlListView( cs.data.request( 'get:layout:controls' ) ) );
-    this.openSubRows( cs.data.request( 'get:selected:layout' ) );
-  },
-
-  closeSub: function() {
-    this.$('.cs-builder-sub').removeClass('active');
-    this.subTimeout = setTimeout(_.bind(function(){
-      if ( this && this.Sub)
-        this.Sub.empty();
-    }, this), 3000);
-  },
-
-  openSubRows: function( selected ) {
-
-    if ( !selected || !selected.section )
-      return;
-
-    cs.navigate.trigger( 'subpane:opened' );
-
-    cs.channel.trigger( 'inspect:element', { model: selected.section } );
-    cs.preview.trigger( 'remote', 'select:section', selected.section );
-
-    clearTimeout(this.subTimeout);
-
-    cs.navigate.reply( 'layout:active:row', { model: ( selected.row ) ? selected.row : selected.section.get('elements').first() } );
-
-    this.Sub.show( new ManageRowsView( { model: selected.section, collection: selected.section.get('elements') } ));
-    this.$('.cs-builder-sub').addClass('active').find('.cs-pane-content-inner').perfectScrollbar({
-      suppressScrollX     : true,
-      scrollYMarginOffset : 25
-    });
-
-    _.defer(function(){
-      cs.data.reply( 'get:selected:layout', null );
-    });
-
-  },
-
-  openSubTemplates: function() {
-
-    cs.navigate.trigger( 'subpane:opened' );
-    clearTimeout(this.subTimeout);
-    this.Sub.show( new TemplatesView( { model: cs.data.request( 'block:manager' ) } ) );
-    this.$('.cs-builder-sub').addClass('active').find('.cs-pane-content-inner').perfectScrollbar({
-      suppressScrollX     : true,
-      scrollYMarginOffset : 25
-    });
-
+  onOpenSubTemplates: function() {
+  	var TemplatesView = require('./sub-templates/layout-sub-templates');
+    this.Sub.show( new TemplatesView() );
   },
 
 });
-},{"../controls/control-collection":44,"./sub-row/layout-sub-rows":120,"./sub-templates/layout-sub-templates":121}],120:[function(require,module,exports){
+},{"../controls/control-collection":36,"../main/base-pane":86,"./sub-row/layout-sub-rows":81,"./sub-templates/layout-sub-templates":82}],81:[function(require,module,exports){
 // RowSubPane
-
 var ViewControlCollection = require('../../controls/control-collection')
-  , ControlCollection = require('../../../data/models/control-collection');
 
-module.exports = Mn.LayoutView.extend({
+module.exports = CS.Mn.LayoutView.extend({
 
   template: 'layout/sub-row/layout-sub-row',
   className: 'cs-pane-content-inner row',
   regions: {
-    RowControls: '#layout-row-controls',
-    ColumnControls: '#layout-column-controls'
+    Controls: '#layout-row-controls',
+    //ColumnControls: '#layout-column-controls'
   },
 
   initialize: function() {
 
 
-    this.columnControls = new ControlCollection();
-    this.rowControls = new ControlCollection([], { proxy: this.model } );
+    // this.columnControls = new ControlCollection();
+    // this.rowControls = new ControlCollection([], { proxy: this.model } );
 
-    this.rowControls.add({
-      name: 'info',
-      controlType: 'element-info',
-      controlTitle: cs.l18n('columns-info-title'),
-      controlTooltip: cs.l18n('columns-info-description')
-    });
+    // this.rowControls.add({
+    //   name: 'info',
+    //   controlType: 'info-box',
+    //   controlTitle: cs.l18n('columns-info-title'),
+    //   controlTooltip: cs.l18n('columns-info-description')
+    // });
 
-    this.rowControls.add({
-      name: 'title',
-      controlType: 'title',
-      showInspectButton: true,
-      divider: true
-    });
+    // this.rowControls.add({
+    //   name: 'title',
+    //   controlType: 'title',
+    //   showInspectButton: true,
+    //   divider: true
+    // });
 
-    this.rowControls.add({
-      name: 'elements',
-      controlType: 'sortable-rows',
-      options: {
-        newTitle: 'Row %s',
-        floor: 1
-      },
-      divider: true
-    });
+    // this.rowControls.add({
+    //   name: 'elements',
+    //   controlType: 'sortable-rows',
+    //   options: {
+    //     newTitle: 'Row %s',
+    //     floor: 1
+    //   },
+    //   divider: true
+    // });
 
-    this.listenTo( cs.navigate, 'layout:column', this.setActiveRow );
+    // this.listenTo( cs.navigate, 'layout:column', this.setActiveRow );
 
   },
 
   setActiveRow: function( view ) {
 
-    if ( view === false ) {
+    // if ( view === false ) {
 
-      view = {
-        model: cs.navigate.request( 'layout:active:row' )
-      };
-    }
-
-
-    if ( !view || !view.model ) {
-      view = {
-        model: this.model.get('elements').first()
-      }
-    }
-
-    if (!view.model.collection || view.model.collection.length == 0) {
-      this.ColumnControls.empty();
-      return;
-    }
-
-    this.columnControls.setProxy( view.model );
-    _.invoke( _.clone( this.columnControls.models ), 'destroy' );
+    //   view = {
+    //     model: cs.navigate.request( 'layout:active:row' )
+    //   };
+    // }
 
 
-    var title = cs.l18n('layout-new-row').replace('%s', view.model.collection.indexOf( view.model ) + 1 );
-    this.columnControls.add({
-      name: 'columnLayout',
-      controlType: 'column-layout',
-      controlTitle: cs.l18n('columns-layout-label').replace('%s', title ),
-      controlTooltip: cs.l18n('columns-layout-tooltip'),
-      defaultValue: '',
-    });
+    // if ( !view || !view.model ) {
+    //   view = {
+    //     model: this.model.get('elements').first()
+    //   }
+    // }
 
-    this.columnControls.add({
-      name: 'columnOrder',
-      controlType: 'column-order',
-      controlTitle: cs.l18n('columns-order-label').replace('%s', title ),
-      controlTooltip: cs.l18n('columns-order-tooltip'),
-      defaultValue: '',
-      divider: true
-    });
+    // if (!view.model.collection || view.model.collection.length == 0) {
+    //   this.ColumnControls.empty();
+    //   return;
+    // }
 
-    if ( view.$el ) {
-      this.$('ul li.sortable-item').removeClass('active');
-      view.$el.addClass('active');
-    }
+    // this.columnControls.setProxy( view.model );
+    // _.invoke( _.clone( this.columnControls.models ), 'destroy' );
 
-    cs.navigate.reply( 'layout:active:row', view.model );
-    this.ColumnControls.show( new ViewControlCollection( { collection: this.columnControls } ) );
+
+    // var title = cs.l18n('row-numeric').replace('%s', view.model.collection.indexOf( view.model ) + 1 );
+    // this.columnControls.add({
+    //   name: 'columnLayout',
+    //   controlType: 'column-layout',
+    //   controlTitle: cs.l18n('columns-layout-label').replace('%s', title ),
+    //   controlTooltip: cs.l18n('columns-layout-tooltip'),
+    //   defaultValue: '',
+    // });
+
+    // this.columnControls.add({
+    //   name: 'columnOrder',
+    //   controlType: 'column-order',
+    //   controlTitle: cs.l18n('columns-order-label').replace('%s', title ),
+    //   controlTooltip: cs.l18n('columns-order-tooltip'),
+    //   defaultValue: '',
+    //   divider: true
+    // });
+
+    // if ( view.$el ) {
+    //   this.$('ul li.sortable-item').removeClass('active');
+    //   view.$el.addClass('active');
+    // }
+
+    // cs.navigate.reply( 'layout:active:row', view.model );
+    // this.ColumnControls.show( new ViewControlCollection( { collection: this.columnControls } ) );
 
   },
 
   onBeforeShow: function() {
-    this.setActiveRow( cs.navigate.request( 'layout:active:row' ) );
-    this.RowControls.show( new ViewControlCollection( { collection: this.rowControls, autoFocus: 'title', } ) );
+    //this.setActiveRow( cs.navigate.request( 'layout:active:row' ) );
+    //this.Controls.show( new ViewControlCollection( { collection: this.rowControls, autoFocus: 'title' } ) );
   },
 
-  onDestroy: function(){
-    this.rowControls.reset();
-    this.columnControls.reset();
-  }
 });
-},{"../../../data/models/control-collection":12,"../../controls/control-collection":44}],121:[function(require,module,exports){
+},{"../../controls/control-collection":36}],82:[function(require,module,exports){
 // TemplatesSubPane
-
 var ViewControlCollection = require('../../controls/control-collection')
-  , ControlCollection = require('../../../data/models/control-collection')
 
-module.exports = Mn.LayoutView.extend({
+module.exports = CS.Mn.LayoutView.extend({
 	template: 'layout/sub-templates/layout-sub-template',
 	className: 'cs-pane-content-inner templates',
 
@@ -6320,133 +4803,29 @@ module.exports = Mn.LayoutView.extend({
   },
 
   initialize: function() {
-
-    this.controls = new ControlCollection([], { proxy: this.model } );
-    this.setupControls();
-
-    this.model.get( 'sections' ).each( _.bind( function(item) {
-      var collection = item.get('templates');
-      this.listenTo( collection, 'add', this.controlReset );
-      this.listenTo( collection, 'remove', this.controlReset );
-    }, this ) );
-
-  },
-
-  setupControls: function() {
-    this.controls.add({
-      name: 'info',
-      controlType: 'element-info',
-      controlTitle: cs.l18n('templates-info-title'),
-      controlTooltip: cs.l18n('templates-info-description')
-    });
-
-    this.controls.add({
-      name: 'action',
-      controlType: 'template-actions',
-      divider: true
-    });
-
-    this.controls.add({
-      name: 'title',
-      controlType: 'template-save-dialog',
-      options: {
-        condition: { 'action': 'save' }
-      }
-    });
-
-    this.controls.add({
-      name: 'uploader',
-      controlType: 'template-upload-dialog',
-      options: {
-        condition: { 'action': 'upload' }
-      }
-    });
-
-    var name, choices, type, userTemplates;
-
-    userTemplates = [];
-
-    this.model.get( 'sections' ).each( _.bind( function(item) {
-
-      name = item.get('name');
-
-      choices = item.get('templates').map(function(item){
-        if ( name == 'user-pages' || name == 'user-blocks' ) {
-          userTemplates.push(item);
-        }
-        return { value: item.get('slug'), label: item.get('title') };
-      });
-
-      type = ( name == 'themeco-pages' || name == 'user-pages' ) ? 'page' : 'block';
-      this.controls.add({
-        name: name,
-        controlTitle: item.get('title'),
-        controlType: 'template-select',
-        templateType: type,
-        buttonText: cs.l18n('templates-insert'),
-        options: {
-          choices: choices,
-        },
-        divider: ( type == 'block' ),
-        compact: ( type == 'block' ),
-      });
-
-    }, this ) );
-
-    choices = userTemplates.map(function(item){
-      var format = ( item.get('type') == 'block' ) ? cs.l18n('templates-remove-block') : cs.l18n('templates-remove-page');
-      return { value: item.get('slug'), label: format.replace('%s', item.get('title') ) };
-    })
-
-    this.controls.add({
-      name: 'user-removals',
-      controlTitle: cs.l18n('templates-remove-label'),
-      controlType: 'template-remove',
-      templateType: 'remove',
-      buttonText: cs.l18n('templates-remove'),
-      options: {
-        choices: choices
-      }
-    });
-
+  	this.listenTo( cs.templates, 'control:reset', function(){
+  		this.onBeforeShow();
+  	});
   },
 
   onBeforeShow: function() {
-    this.Controls.show( new ViewControlCollection( { collection: this.controls } ) );
+    this.Controls.show( new ViewControlCollection( { collection: cs.component('layout-templates').controls } ) );
   },
 
-  controlReset: function() {
-    this.controls.reset();
-    this.setupControls();
-    this.onBeforeShow();
-  },
-
-  onDestroy: function(){
-    this.controls.reset();
-  }
 });
-},{"../../../data/models/control-collection":12,"../../controls/control-collection":44}],122:[function(require,module,exports){
-// ElementLibraryPane
-
+},{"../../controls/control-collection":36}],83:[function(require,module,exports){
 var ViewBasePane = require('../main/base-pane')
-  , ViewElementLibrary = require('./library-list');
-
 module.exports = ViewBasePane.extend({
-  className: 'cs-pane elements active',
-  template: 'library/element-library',
-  regions: {
-    Sub: '#elements-sub',
-    Library: '#elements-library'
-  },
-
-  events: {
+  name: 'elements',
+  paneTemplate: 'library/search',
+  paneEvents: {
     'keyup #elements-search': 'search',
     'search #elements-search': 'search'
   },
 
-  onBeforeShow: function() {
-    this.Sub.empty();
-    this.Library.show( new ViewElementLibrary( {collection: cs.data.request('get:elementLibrary') } ) );
+  onShowContent: function() {
+  	var ViewElementLibrary = require('./library-list');
+    this.Content.show( new ViewElementLibrary( {collection: cs.elementLibrary.all() } ) );
   },
 
   search: function() {
@@ -6458,15 +4837,15 @@ module.exports = ViewBasePane.extend({
     this.$('#elements-search').focus();
   }
 });
-},{"../main/base-pane":125,"./library-list":124}],123:[function(require,module,exports){
+},{"../main/base-pane":86,"./library-list":85}],84:[function(require,module,exports){
 // ElementLibraryItem
 
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   tagName: "li",
   template: 'library/element-stub',
   attributes: { 'draggable': 'true' },
   serializeData: function() {
-		return _.extend( Mn.ItemView.prototype.serializeData.apply(this,arguments), {
+		return _.extend( CS.Mn.ItemView.prototype.serializeData.apply(this,arguments), {
 			icon: cs.icon( 'element-' + this.model.get( 'name' ) )
 		});
 	},
@@ -6477,19 +4856,19 @@ module.exports = Mn.ItemView.extend({
 	},
 
 	endDrag: function(e) {
-		cs.preview.trigger( 'remote', 'dragging', false );
+		 cs.global.trigger( 'dragging', false );
 	},
 
 	setData: function (e) {
 
-		cs.preview.trigger( 'remote', 'dragging', true );
-		cs.preview.trigger( 'remote', 'incoming:element' );
+		 cs.global.trigger( 'dragging', true );
+		 cs.global.trigger( 'incoming:element' );
 
 		var dataTransfer = e.originalEvent.dataTransfer;
     dataTransfer.effectAllowed = 'copy';
     var data = JSON.stringify({
 			action: 'create',
-    	elType: this.model.get( 'name' )
+    	_type: this.model.get( 'name' )
     });
 
     var $icon = this.$('svg');
@@ -6499,34 +4878,27 @@ module.exports = Mn.ItemView.extend({
     }
 
     dataTransfer.setData( 'cornerstone/element', data );
-	},
 
-	// onRender: function() {
-	// 	this.$el.attr( 'data-tooltip-message', this.model.get( 'description' ) );
-	// }
+	}
+
 });
-},{}],124:[function(require,module,exports){
-module.exports = Mn.CollectionView.extend({
+},{}],85:[function(require,module,exports){
+module.exports = CS.Mn.CollectionView.extend({
 	tagName: 'ul',
 	className: 'cs-elements',
 	childView: require('./element-stub'),
 	childViewContainer: '.cs-pane-section ul',
 
 	initialize: function( ) {
-
-		this.publicSections = cs.config.request('publicElementSections');
 		this.query = '';
 		this.listenTo( cs.search, 'elements', this.updateSearch );
 	},
 
 	filter: function ( child, index, collection ) {
 
-		// Hide elements defined as inactive
-		if ( child.get('active') == false )
-			return false;
-
-		// Only show public elements
-		if ( !_.contains( this.publicSections, child.get('section') ) )
+		// Hide inactive, out-of-context, or child elements.
+		var flags = child.get('flags');
+		if ( child.get('active') == false || !_.contains( ['builder','all'], flags.context ) || flags.child )
 			return false;
 
 		// Show all when not searching
@@ -6534,7 +4906,7 @@ module.exports = Mn.CollectionView.extend({
 			return true;
 
 		// Show items that match a search query
-		var title = child.get('title');
+		var title = child.get('ui').title;
     return ( title.score( this.query ) > .5 );
   },
 
@@ -6547,55 +4919,94 @@ module.exports = Mn.CollectionView.extend({
 		this.query = '';
 	}
 });
-},{"./element-stub":123}],125:[function(require,module,exports){
+},{"./element-stub":84}],86:[function(require,module,exports){
 // BasePane
-var BasePane = Mn.LayoutView.extend({
+var BasePane = CS.Mn.LayoutView.extend({
 
-  constructor: function(options) {
+	name: 'undefined',
 
-    //Override LayoutView Constructor
-    options = options || {};
-    this._firstRender = true;
-    this._initializeRegions(options);
-    Mn.ItemView.call(this, options);
+	className: function() { return 'cs-pane ' + this.name; },
 
-    //Additional "initialize" code
-    //this.listenTo(cs.channel, 'pane:sub:open', this.openSub );
-    this.listenTo(cs.channel, 'pane:sub:close', this.closeSub );
+	template: 'main/pane',
+	paneTemplate: false,
+
+	regions: {
+    Content: '#content',
+    Sub: '#sub'
   },
 
-  events: {
-    'click button.cs-builder-sub-back': 'closeSub'
+	events: function() {
+		return _.extend( { 'click button.cs-builder-sub-back': 'back' }, this.paneEvents );
+	},
+
+
+  paneEvents: {},
+
+  onBaseOpenSub: function( sub ) {
+
+		clearTimeout(this.subTimeout);
+		cs.navigate.trigger( 'subpane:opened', this.name + ':' + sub );
+  	this.triggerMethod( 'open:sub' );
+  	this.triggerMethod( 'open:sub:' + sub );
+
+  	this.$('.cs-builder-sub').addClass('active').find('.cs-pane-content-inner').perfectScrollbar({
+      suppressScrollX     : true,
+      scrollYMarginOffset : 25
+    });
+
+  },
+
+  onBaseCloseSub: function() {
+  	this.$('.cs-builder-sub').removeClass('active');
+  	this.subTimeout = setTimeout( _.bind( this.closeSub, this ), 3000 );
+  	this.triggerMethod( 'close:sub' );
+  },
+
+  back: function() {
+  	cs.navigate.trigger( this.name + ':home' );
   },
 
   closeSub: function() {
-    this.$('.cs-builder-sub').removeClass('active');
-    this.Sub.empty();
+  	if (this.Sub)
+    	this.Sub.empty();
   },
 
-  onBeforeShow: function() {
+  onBeforeShow: function(){
+
     this.Sub.empty();
+    this.Content.empty();
+    this.triggerMethod( 'show:content' );
+
+  },
+
+  serializeData: function() {
+
+  	var data = _.extend( CS.Mn.LayoutView.prototype.serializeData.apply( this, arguments ), {
+      heading: cs.l18n( this.name + '-heading' ),
+      returnButtonText: cs.l18n( this.name + '-return' ),
+      paneTemplate: this.paneTemplate,
+      name: this.name
+    });
+
+  	if ( _.isFunction( this.updateSerializeData ) )
+  		return this.updateSerializeData( data );
+
+  	return data;
+
   }
 
 });
 
-//Override extend functionality
-BasePane.extend = function(child) {
-  var view = Backbone.View.extend.apply(this, arguments);
-  view.prototype.events = _.extend({}, this.prototype.events, child.events);
-  return view;
-};
-
 module.exports = BasePane;
 
-},{}],126:[function(require,module,exports){
+},{}],87:[function(require,module,exports){
 // Editor
 
 var ViewHeader    = require('./header')
   , ViewFooter    = require('./footer')
   , ViewExpansion = require('../extra/expansion');
 
-module.exports = Mn.LayoutView.extend({
+module.exports = CS.Mn.LayoutView.extend({
 
   template: 'main/editor',
 
@@ -6614,9 +5025,11 @@ module.exports = Mn.LayoutView.extend({
   },
 
   initialize: function() {
+
     this.listenTo( cs.navigate, 'pane', this.changePane );
     this.listenTo( cs.confirm, 'open', this.confirmOpen );
     this.listenTo( cs.navigate, 'scrollbar:update', this.scrollbarUpdate );
+    this.listenTo( cs.options, 'editor:position', this.setEditorPosition );
 
     this.listenTo( cs.message, 'notice', this.growlNotice );
     this.listenTo( cs.message, 'success', this.growlSuccess );
@@ -6628,7 +5041,7 @@ module.exports = Mn.LayoutView.extend({
     Backbone.$('#cornerstone').on('mouseenter mouseleave', '.cs-sortable li.sortable-item', _.bind( this.sortableHover, this ) );
 
     if ( localStorage['CornerstonePane'] == 'settings' ) {
-      cs.data.reply('saved:last', moment() );
+      cs.data.reply('saved:last', Cornerstone.Vendor.moment() );
       cs.channel.trigger('update:saved:last');
     }
 
@@ -6648,19 +5061,27 @@ module.exports = Mn.LayoutView.extend({
     this.$el.after(this.Expansion.$el);
 
     cs.data.reply('scrollbar:width', this.getScrollbarWidth() );
+
+    this.setEditorPosition();
   },
 
-  changePane: function( pane ) {
+  changePane: function( pane, sub ) {
 
     cs.tooltips.trigger( 'kill' );
 
     if (this.activePane != pane ) {
       cs.navigate.trigger('pane:switch');
+      this.Pane.show( new this.panes[pane]() );
     }
     this.activePane = pane;
+
     cs.navigate.reply( 'active:pane', this.activePane );
 
-    this.Pane.show( new this.panes[pane]() );
+    if ( sub ) {
+    	this.Pane.currentView.triggerMethod( 'base:open:sub', sub );
+    } else {
+    	this.Pane.currentView.triggerMethod( 'base:close:sub' );
+    }
 
     this.$('.cs-pane-content-inner').perfectScrollbar({
       suppressScrollX     : true,
@@ -6745,10 +5166,14 @@ module.exports = Mn.LayoutView.extend({
 
   scrollbarUpdate: function() {
     this.$('.cs-pane-content-inner').perfectScrollbar('update');
+  },
+
+  setEditorPosition: function() {
+  	Backbone.$('#cornerstone').toggleClass( 'cs-right', cs.options.request( 'editor:position' ) == 'right' );
   }
 
 });
-},{"../extra/expansion":113,"../inspector/inspector":118,"../layout/layout":119,"../library/element-library":122,"../settings/settings":133,"./footer":127,"./header":128}],127:[function(require,module,exports){
+},{"../extra/expansion":73,"../inspector/inspector":79,"../layout/layout":80,"../library/element-library":83,"../settings/settings":109,"./footer":88,"./header":89}],88:[function(require,module,exports){
 var ViewExpand  = require('../extra/expand')
   , ViewConfirm = require('../extra/confirm')
   , ViewHome    = require('../extra/home')
@@ -6758,7 +5183,7 @@ var ViewExpand  = require('../extra/expand')
 
 
 // EditorFooter
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
 
   template: 'main/footer',
   ui: {
@@ -6784,8 +5209,8 @@ module.exports = Mn.ItemView.extend({
   initialize: function() {
 
     this.listenTo(cs.extra, 'flyout:updated', this.toggleMode );
-    this.listenTo(cs.channel, 'save:complete', this.saveComplete );
-    this.listenTo(cs.channel, 'save:error', this.saveComplete );
+    this.listenTo(cs.data, 'save:success', this.saveComplete );
+    this.listenTo(cs.data, 'save:error', this.saveComplete );
     this.listenTo(cs.confirm, 'open', this.confirmOpen );
     this.listenTo(cs.tooltips, 'kill', this.killTooltip )
 
@@ -6794,7 +5219,7 @@ module.exports = Mn.ItemView.extend({
     this.modules = {
       home: new ViewHome(),
       expand: new ViewExpand(),
-      options: new ViewOptions({ model: cs.data.request( 'get:options' ) }),
+      options: new ViewOptions(),
       respond: new ViewRespond(),
       save: new ViewSaveComplete(),
       confirm: new ViewConfirm(),
@@ -6803,7 +5228,7 @@ module.exports = Mn.ItemView.extend({
     this.panels = _.pick(this.modules, 'home', 'expand', 'options', 'respond', 'save', 'confirm' );
 
     cs.extra.on( 'collapse', function( state ) {
-      cs.preview.trigger('remote', 'collapse', ( state == 'on' ) );
+       cs.global.trigger( 'collapse', ( state == 'on' ) );
     });
 
     this.panelMode = 'none';
@@ -6886,7 +5311,7 @@ module.exports = Mn.ItemView.extend({
 
   save: function() {
     this.$('button.save').prop( 'disabled', true );
-    cs.channel.trigger( 'action:save' );
+    cs.events.trigger( 'action:save' );
   },
 
   saveComplete: function() {
@@ -6932,11 +5357,10 @@ module.exports = Mn.ItemView.extend({
     this.panels.confirm.triggerMethod( 'open', data );
   }
 
-
 });
-},{"../extra/confirm":111,"../extra/expand":112,"../extra/home":114,"../extra/options":115,"../extra/respond":116,"../extra/save-complete":117}],128:[function(require,module,exports){
+},{"../extra/confirm":71,"../extra/expand":72,"../extra/home":74,"../extra/options":75,"../extra/respond":76,"../extra/save-complete":77}],89:[function(require,module,exports){
 // EditorHeader
-module.exports = Mn.ItemView.extend({
+module.exports = CS.Mn.ItemView.extend({
   tagName: 'nav',
   template: 'main/header',
 
@@ -6975,8 +5399,8 @@ module.exports = Mn.ItemView.extend({
     this.$( '.' + pane ).addClass('active').siblings().removeClass('active');
   }
 });
-},{}],129:[function(require,module,exports){
-module.exports = Mn.ItemView.extend({
+},{}],90:[function(require,module,exports){
+module.exports = CS.Mn.ItemView.extend({
 	template: 'observer',
 	className: 'cs-observer',
 	initialize:function(){
@@ -6986,9 +5410,10 @@ module.exports = Mn.ItemView.extend({
 
 		this.observing = null;
 		this.tooltipText = 'Element';
+		this.canPreview = true;
 
-		this.listenTo( cs.observer, 'in', this.observeIn );
-		this.listenTo( cs.observer, 'out', this.observeOut );
+		this.listenTo( cs.observer, 'start', this.observeStart );
+		this.listenTo( cs.observer, 'end', this.observeEnd );
 		this.listenTo( cs.preview,  'kill:observer', this.kill );
 		this.listenTo( cs.observer, 'kill', this.kill );
 		this.listenTo( cs.observer, 'drag:indicator', this.dragIndicator );
@@ -7006,22 +5431,53 @@ module.exports = Mn.ItemView.extend({
 		clearInterval( this.renderInterval );
 
 		this.coordinates = { top: 0, left: 0, height: 0, width: 0 };
-
-		var immediate = immediate || false;
 		this.observing = view;
-		if (this.observing) {
-			var modelMeta = view.model.get('meta');
-			this.tooltipText = ( modelMeta ) ? modelMeta.tooltip || modelMeta.elTitle : 'Element';
+
+
+		if ( this.observing ) {
+			var type = view.model.get('_type');
+			var el = cs.elementLibrary.lookup( type );
+			var flags = el.get( 'flags' );
+
+			this.setTooltip( view.model, type, flags );
+			this.canPreview = flags.can_preview;
+
 		}
+
 		(immediate) ? this.renderNow() : this.lazyRender();
 	},
 
-	observeIn: function( view, immediate ) {
+	setTooltip: function( model, type, flags ) {
+
+		switch ( type ) {
+      case 'section':
+        text = cs.l18n('section-format').replace('%s', model.get('title') );
+        break;
+      case 'row':
+        text = cs.l18n('row-numeric').replace('%s', model.getIndex() + 1 );
+        break;
+      case 'column':
+        text = cs.l18n('column-format').replace('%s', model.get('size') );
+        break;
+      default:
+      	text = model.definition.get('ui').title;
+      	break;
+    }
+
+    if ( !flags.can_preview ) {
+    	text = cs.l18n('no-preview').replace('%s', text );
+    }
+
+    this.tooltipText = text;
+
+	},
+
+	observeStart: function( view, immediate ) {
   	if ( !_.isNull( this.observing ) && this.observing.cid == view.cid) return;
   	this.setObserver( view, immediate || false );
   },
 
-  observeOut: function( view, immediate ) {
+  observeEnd: function( view, immediate ) {
   	if ( _.isNull( this.observing ) || this.observing.cid != view.cid ) return;
 		this.setObserver( null, immediate || false );
 	},
@@ -7116,8 +5572,13 @@ module.exports = Mn.ItemView.extend({
 			height: newHeight,
 		};
 
+
 		this.render();
 		this.$el.css( this.coordinates );
+
+		if ( this.coordinates.top < 25 ) {
+			this.$('.cs-observer-tooltip').removeClass('top');
+		}
 
 	},
 
@@ -7131,13 +5592,15 @@ module.exports = Mn.ItemView.extend({
 			return;
 		}
 
+		this.$el.toggleClass('cs-observer-no-preview', !this.canPreview );
 		this.$el.show();
+
 
 
 	},
 
 	serializeData: function() {
-		return _.extend( Mn.ItemView.prototype.serializeData.apply( this, arguments ), {
+		return _.extend( CS.Mn.ItemView.prototype.serializeData.apply( this, arguments ), {
 			tooltip: this.tooltipText
 		} );
 	},
@@ -7160,25 +5623,42 @@ module.exports = Mn.ItemView.extend({
 
 	// }
 });
-},{}],130:[function(require,module,exports){
-var Observer = require('./observer.js');
-module.exports = Mn.CollectionView.extend({
+},{}],91:[function(require,module,exports){
+module.exports = Cornerstone.Mn.CompositeView.extend({
 
-	childView: require('../elements/section'),
-	emptyView: Mn.ItemView.extend({
+	template: false,
+
+	emptyView: CS.Mn.ItemView.extend({
 		className: 'cs-empty-rows',
 		template: 'empty-rows',
 	}),
 
+	getChildView: function( item ) {
+		return cs.component('view-loader').elementLookup( item.get('_type') );
+	},
+
 	initialize:function(){
 
-    this.listenTo( this.collection, 'sort', this.render );
-    this.observerView = new Observer();
+		this.collection = this.model.elements;
 
-		this.listenTo( cs.preview, 'set:collapse', this.toggleCollapse );
-		this.listenTo( cs.preview, 'dragging', this.toggleDragging );
-		this.listenTo( this.collection, 'new:item', _.debounce( _.bind( this.scrollToSection, this ), 250, true ) );
-		this.listenTo( cs.preview, 'select:section', this.scrollToSection );
+		this.listenToOnce( cs.global, 'preview:primed', function() {
+			this.$el.removeClass('cs-preview-loading');
+		} );
+
+		this.listenTo( this.collection, 'sort', this.render );
+
+		cs.$indicator = Backbone.$('<div class="cs-indicator"></div>');
+
+    cs.preview.on('incoming:element', function() {
+      cs.$indicator.removeAttr('style');
+    });
+
+    this.observerView = new (require('./observer.js'))();
+
+		this.listenTo(  cs.global, 'set:collapse', this.toggleCollapse );
+		this.listenTo(  cs.global, 'dragging', this.toggleDragging );
+
+		 this.listenTo( cs.preview, 'autoscroll', _.debounce( _.bind( this.autoScroll, this ), 250, true ) );
 
 	},
 
@@ -7215,26 +5695,1045 @@ module.exports = Mn.CollectionView.extend({
 		this.$el.toggleClass('cs-dragging', state )
 	},
 
-	scrollToSection: function( model ) {
+	autoScroll: function( view ) {
 
-		var child, $offset, offset;
+		if ( view.$el.visible( true ) )
+			return;
 
-		child = this.children.findByModel(model);
-		if ( child ) {
-			$offset = Backbone.$( cs.config.request('scrollTopSelector') );
-			offset = ($offset.length > 0 ) ? $offset.outerHeight() : 0;
+		var $from = Backbone.$( cs.config('scrollTopSelector') );
+		var top = ($from.length > 0 ) ? $from.outerHeight() : 0;
+		var offset = view.$el.offset().top - top - 27; // Magic number for observer height
+		Backbone.$('html,body').animate( { scrollTop: offset }, 700, 'swing' );
 
-			Backbone.$('html,body').animate( {
-        scrollTop: child.$el.offset().top - offset
-      } ,700, 'swing' );
+	},
+
+});
+},{"./observer.js":90}],92:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	toggle: function( e ) {
+
+		var href
+		var $this   = this.$(e.target)
+		var $target = this.$( $this.attr('data-target') || e.preventDefault() || $this.attr('href') )
+		var data    = $target.data('bs.collapse')
+		var option  = data ? 'toggle' : $this.data()
+		var parent  = $this.attr('data-parent')
+		var $parent = parent && this.$(parent)
+
+		if (!data || !data.transitioning) {
+		if ($parent) $parent.find('[data-toggle="collapse"][data-parent="' + parent + '"]').not($this).addClass('collapsed')
+			$this[$target.hasClass('in') ? 'addClass' : 'removeClass']('collapsed')
 		}
+
+		jQuery.fn.collapse.call($target, option)
+
+	},
+
+	onClickBeforeInspect: function( e ) {
+		if ( e.target.className.indexOf('x-accordion-toggle') >= 0 ) {
+			this.toggle(e);
+		}
+	},
+
+});
+},{}],93:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	elementEvents: {
+		'click button.close' : 'closeButton'
+	},
+
+	closeButton: function( e ) {
+		e.preventDefault();
+	}
+});
+},{}],94:[function(require,module,exports){
+module.exports = CS.Mn.CompositeView.extend( {
+
+	remoteRender: true,
+	template: false, // <div class="cs-inception"></div>
+	childViewContainer: '@ui.root',
+	className: 'cs-preview-element-wrapper',
+	draggable: true,
+
+	attributes: function() {
+		return { 'draggable': _.result( this, 'draggable' ) };
+	},
+
+	events: function() {
+
+		var events = {
+			'click a': '_preventLinkout'
+		};
+
+		var inspectable = _.result( this, 'inspectable' )
+		if ( inspectable || _.isUndefined( inspectable ) ) {
+
+			events = _.extend( events, {
+				'click': '_click',
+				'mouseover': '_observeStart',
+				'mouseout': '_observeEnd'
+			}, this._setupAutoFocus() );
+
+		}
+
+		var draggable = _.result( this, 'draggable' )
+		if ( draggable || _.isUndefined( draggable ) ) {
+
+			events = _.extend( events, {
+				'dragstart.h5s': '_dragStart',
+				'dragend.h5s': '_dragEnd',
+			} );
+
+		}
+
+		return _.extend( events, _.result( this, 'elementEvents' ) || {} );
+	},
+
+	getChildView: function( item ) {
+		return cs.component('view-loader').elementLookup( item.get('_type') );
+	},
+
+	constructor: function( options ) {
+
+		CS.Mn.CompositeView.apply(this, arguments);
+
+		this._setupChildren();
+
+		this._repaint = _.debounce( _.bind( function() {
+			if ( this.isDestroyed ) return;
+			this.render();
+		}, this ), 5 );
+
+		this._updateMarkup = _.debounce( _.bind( function() {
+			this.__updateMarkup();
+		}, this ), 5 );
+
+		if ( this.model.collection )
+			this.modelIndex = this.model.collection.indexOf( this.model );
+
+
+		this._updateMarkup();
+		this.listenTo( this.model, 'change', this._updateMarkup );
+		this.listenTo( this.model, 'remote:render', this._repaint );
+		this.on( 'render', this._baseRender );
+
+		this.listenTo( this.model, 'observe:start', function() {
+			cs.observer.trigger( 'start', this );
+		} );
+
+    this.listenTo( this.model, 'observe:end', function() {
+			cs.observer.trigger( 'end', this );
+    } );
+
+    // Privately attach event handlers so we can use the triggerMethod hooks in inheriting views
+    this.on( 'render:template', this._onRenderTemplate );
+    this.on( 'template:data:ready', function( data ){
+    	this.once( 'render', function() {
+				this.triggerMethod( 'construct:element', data );
+    	});
+    } );
+
+		this.triggerMethod( 'element:init' );
+
+		this.listenTo( cs.global, 'autoscroll', function( cid ){
+			if ( this.model && this.model.cid == cid )
+				cs.preview.trigger( 'autoscroll', this );
+		} );
+
+	},
+
+	_setupChildren: function() {
+
+		if ( this.model.definition.get('flags').manageChild ) {
+			this.listenTo( this.model.elements, 'sort', this._updateManagedChild );
+			this.listenTo( this.model.elements, 'model:change', this._updateManagedChild );
+			return;
+		}
+
+		this.collection = this.model.elements;
+		this.listenTo( this.collection, 'sort', this._updateMarkup );
+
+	},
+
+	_updateManagedChild: function() {
+		this.model.trigger( 'update:child:data' );
+		this._updateMarkup();
+	},
+
+	__updateMarkup: function() {
+		if ( this.remoteRender ) {
+			cs.render.triggerMethod( 'queue', this.model );
+		} else {
+			this._repaint();
+		}
+	},
+
+	serializeData: function() {
+		var base = CS.Mn.CompositeView.prototype.serializeData.apply(this,arguments);
+		var elementData = _.result( this, 'elementData' ) || {};
+		return _.defaults( _.extend( base, elementData ), this.model.getDefaults() );
+	},
+
+	attachElContent: function( html ) {
+
+    if ( this.remoteRender ) {
+
+    	html = cs.render.getCache( this.model );
+
+    	if ( _.isFunction( html) )
+    		html = CS.Mn.Renderer.render( html, this.serializeData() );
+
+    }
+
+    if ( html ) this.$el.html(html);
+
+    return this;
+  },
+
+  // Bind the @root ui dynamically. Use inception parent if it exists, otherwise this.$el
+  // This is used for our composite view's childViewContainer
+  bindUIElements: function() {
+  	if (!this.ui) this.ui = {};
+  	CS.Mn.CompositeView.prototype.bindUIElements.apply(this,arguments);
+  	var $inception = this.$('.cs-inception');
+    this.ui['root'] = ($inception.length) ? $inception.parent() : this.$el;
+  },
+
+  // After UI is bound, remove inception placeholder if it exists
+  _onRenderTemplate: function() {
+  	var $inception = this.$('.cs-inception');
+  	if ($inception.length) $inception.detach();
+  },
+
+  _baseRender: function() {
+
+  	this.triggerMethod('before:shortcode:init');
+
+    window.xData.base.processElements( null, this.$el );
+
+    cs.preview.trigger( 'responsive:text', this );
+
+    this.triggerMethod('after:element:render');
+
+    if ( this.remoteRender ) {
+      _.defer( _.bind( function(){
+      	if ( this._emptyDetection() ) {
+					this.$el.html( CS.Mn.Renderer.render( 'empty-element', this.serializeData() ) );
+      	}
+      }, this ), 0 );
+    }
+
+  },
+
+  _setupAutoFocus: function() {
+
+  	var events = {}, ui = this.model.definition.get('ui');
+
+  	if (!ui.autofocus) return events;
+
+  	_.each( ui.autofocus, function( value, key ){
+  		var selector = 'click ' + value;
+  		events[selector] = function() {
+  			 cs.global.trigger( 'auto:focus', key );
+  		}
+  	});
+
+  	return events;
+
+  },
+
+  _preventLinkout: function( e ) {
+  	e.preventDefault();
+  },
+
+  _click: function( e ) {
+		this.triggerMethod('click:before:inspect', e );
+		e.stopPropagation();
+		cs.global.trigger( 'inspect', this.model )
+  },
+
+	_dragStart: function( e ) {
+		this._setData(e);
+		_.defer( _.bind( this.triggerMethod, this), 'drag:start', e )
+	},
+
+	_dragEnd: function( e ) {
+		cs.preview.trigger( 'dragging', false );
+		if ( e.originalEvent ) this.triggerMethod( 'drag:end', e );
+	},
+
+	_observeStart: function( e ) {
+		e.stopPropagation();
+		this.model.trigger( 'observe:start' );
+  },
+
+  _observeEnd: function( e ) {
+  	this.model.trigger('observe:end');
+  },
+
+  _emptyDetection: function() {
+
+  	if ( this.model.definition.get('flags').empty ) {
+  		return false; // detection handled server side, but aborted here.
+  	}
+
+    return ( this.$el.shadowHeight() < 1 );
+
+  },
+
+  _setData: function ( e ) {
+
+		var dataTransfer = e.originalEvent.dataTransfer;
+    dataTransfer.effectAllowed = 'copy';
+    var data = JSON.stringify({
+			action: 'move',
+    	id: this.model.cid,
+    });
+
+    cs.preview.replyOnce( 'cache:'+ this.model.cid, this.model );
+    dataTransfer.setData( 'cornerstone/element', data );
 
 	}
 
+} );
+},{}],95:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	onAfterElementRender: function() {
+
+    _.defer( _.bind( function(){
+    	this.$('.x-card-outer').trigger('cs:setcardheight')
+    }, this ) );
+
+	}
+});
+},{}],96:[function(require,module,exports){
+module.exports = Cornerstone.ElementViews.Base.extend({
+
+	remoteRender: false,
+	draggable: false,
+
+	emptyView: CS.Mn.ItemView.extend({
+    className: 'cs-empty-column',
+    template: 'empty-column',
+  }),
+
+	elementEvents: {
+		'click svg.cs-custom-icon': 'clickIcon',
+		'drop.h5s': 'receiveElement',
+		'dragenter.h5s': 'dragEnter',
+		'dragover.h5s': 'dragOver',
+	},
+
+	initialize: function() {
+
+		this.checkDragOverStart = _.once( this.dragOverStart );
+		this.checkDragLeave = _.debounce( this.dragLeave, 50 );
+		this.throttleSetDragIndicator = _.throttle( _.bind( this.setDragIndicator, this ), 125, { leading: false, trailing: false } );
+		this.localIndex = null;
+		this.dropIndex = 0;
+
+		this.emptyElementView = new this.emptyView();
+		this.emptyElementView.render();
+
+	},
+
+	clickIcon: function( e ) {
+		e.stopPropagation();
+		cs.global.trigger('nav:kylelements');
+	},
+
+	onRemoveChild: function() {
+  	this.localIndex = null;
+  	this.emptyClassCheck();
+  },
+
+  onAddChild: function( child ) {
+		child.triggerMethod('added:to:column');
+	},
+
+  onRender: function() {
+  	cs.$indicator.detach();
+  },
+
+	emptyClassCheck: function( on ) {
+		this.emptyElementView.$el.detach();
+		if ( on && this.collection.length <= 1) this.$el.append(this.emptyElementView.$el);
+		this.$el.toggleClass( 'cs-empty', ( this.collection.isEmpty() || ( !!on ) ) );
+	},
+
+	dragOverStart: function( ) {
+		this.$el.toggleClass( 'cs-receiving', true );
+		cs.observer.trigger( 'in', this, true );
+	},
+
+	dragEnter: function() {
+		this.checkDragOverStart();
+		this.checkDragLeave();
+	},
+
+	dragOver: function(e) {
+
+		this.checkDragOverStart();
+		this.checkDragLeave();
+
+    if (e.originalEvent.preventDefault)
+      e.originalEvent.preventDefault();
+
+    e.originalEvent.dataTransfer.dropEffect = 'copy';
+
+    if (this.collection.length > 0 ) {
+    	this.throttleSetDragIndicator( e.originalEvent.pageY );
+    }
+
+	},
+
+	dragLeave: function () {
+		this.$el.toggleClass( 'cs-receiving', false );
+		this.checkDragOverStart = _.once( this.dragOverStart );
+		cs.observer.trigger( 'out', this );
+		cs.$indicator.detach();
+	},
+
+	receiveElement: function ( e ) {
+
+		this.emptyClassCheck();
+		cs.observer.trigger('kill:indicator');
+		this.$el.toggleClass( 'cs-receiving', false );
+		this.localIndex = null;
+
+    cs.observer.trigger( 'kill');
+    cs.preview.trigger( 'dragging', false );
+
+		var data = JSON.parse( e.originalEvent.dataTransfer.getData('cornerstone/element') );
+		if ( !data ) return;
+
+    if ( data.action == 'create' && data._type ) {
+    	return this.model.elements.create( { _type: data._type }, {}, this.dropIndex  );
+    }
+
+
+    if ( data.action =='move' && data.id ) {
+
+    	var incoming = cs.preview.request( 'cache:'+ data.id );
+
+    	if ( this.collection.get({ cid: data.id }) ) {
+    		return this.collection.trigger( 'update:position', incoming, this.dropIndex );
+    	}
+
+    	var newModel = this.model.elements.create( incoming.toJSON(), _.clone( incoming.options ), this.dropIndex  );
+    	newModel.shadow = incoming.cid;
+    	incoming.trigger( 'column:change', newModel );
+    	incoming.destroy();
+
+    	this.render();
+
+    }
+
+    this.dropIndex = 0;
+
+	},
+
+	onChildviewDragStart: function( child ) {
+
+  	cs.preview.trigger( 'dragging', true );
+    cs.observer.trigger( 'kill' );
+
+  	this.localIndex = this.collection.indexOf(child.model);
+
+  	if ( _.isNull( this.localIndex ) && this.collection.length != 1 ) {
+  		child.$el.before(cs.$indicator);
+  	}
+
+  	cs.$indicator.css({
+  		height: child.$el.outerHeight()
+  	});
+
+  	child.$el.toggleClass( 'cs-dragging', true );
+  	this.emptyClassCheck( true );
+
+  },
+
+  onChildviewDragEnd: function( child ) {
+
+  	child.$el.toggleClass( 'cs-dragging', false );
+  	cs.observer.trigger('kill:indicator');
+
+  	if (this.localIndex == this.children.length - 1 ) {
+  		this.$el.append(child.$el);
+  	} else {
+  		this.$el.children().eq(this.localIndex).before(child.$el);
+  	}
+
+  	this.emptyClassCheck();
+
+  },
+
+	setDragIndicator: function( y ) {
+		cs.observer.trigger('kill:indicator');
+		this.findDropIndex( y );
+  	this.renderIndicator();
+	},
+
+	findDropIndex: function( y ) {
+
+		var model = this.findClosest( y );
+		var index;
+		if ( _.isNull(model) ) {
+			index = this.collection.length;
+		} else {
+			index = this.collection.indexOf( model );
+		}
+
+		if ( this.localIndex && index > this.localIndex || this.localIndex == 0 )
+  		index--;
+
+  	this.dropIndex = index;
+
+	},
+
+	renderIndicator: function() {
+
+		if ( !_.isNull( this.localIndex ) && this.collection.length == 1 )
+			return;
+
+		if (this.dropIndex == 0 ) {
+			this.$el.prepend(cs.$indicator);
+			return;
+		}
+
+		if (this.dropIndex == ( ( _.isNull( this.localIndex ) ) ? this.collection.length : this.collection.length - 1 ) ) {
+			this.$el.append(cs.$indicator);
+  	} else {
+  		if ( _.isNull( this.localIndex ) || this.localIndex > this.dropIndex ) {
+				this.children.findByModel( this.collection.at( this.dropIndex ) ).$el.before(cs.$indicator);
+			} else {
+				this.children.findByModel( this.collection.at( this.dropIndex + 1 ) ).$el.before(cs.$indicator);
+			}
+
+  	}
+	},
+
+	findClosest: function( y ) {
+
+		var columnBottom = this.$el.offset().top + this.$el.outerHeight();
+		var top = this.$el.offset().top, bottom = 0, closest = null, prev = null, view = null;
+
+		if ( this.collection.length == 1 ) {
+			bottom = columnBottom;
+			if ( y >= top && y <= bottom ) {
+        if (y > ( top + ( bottom - top ) / 2 ) ) {
+        	return null;
+        } else {
+        	return this.collection.first();
+        }
+      }
+		}
+
+    this.collection.each( _.bind( function( model, index ) {
+
+    	view = this.children.findByModel( model );
+    	if (view.$el.hasClass('cs-dragging')) {
+    		return;
+    	}
+
+  		bottom = view.$el.offset().top + ( view.$el.outerHeight(true) / 2 ) + 45;
+
+      if ( y >= top && y <= bottom ) {
+        closest = model;
+      }
+
+      top = bottom;
+
+
+      // We have to check both directions on the last iteration
+      if ( index == this.collection.length - 1 ) {
+      	bottom = columnBottom;
+
+      	if ( y >= top && y <= bottom ) {
+	        closest = null; // out of bounds
+	      }
+      }
+
+    }, this ) );
+
+    return closest;
+
+	},
+
+
+
+
+
+
+
+
+
+	onElementInit: function() {
+
+	},
+
+	onConstructElement: function( data ) {
+
+		classes = [ 'x-column', 'x-sm' ];
+		styles = {};
+
+		classes.push( 'x-' + data.size.replace('/','-') );
+
+		if ( 'none' != data.text_align ) {
+			classes.push(data.text_align);
+		}
+
+		if ( _.isArray( padding = _.clone( data.padding ) ) ) {
+			padding.pop();
+			styles['padding'] = padding.join(' ');
+		}
+
+		if ( _.isArray( borderWidth = _.clone( data.border_width ) ) ) {
+			borderWidth.pop();
+			if ( _.unique(borderWidth) != '0px' ) {
+				styles['border-width'] = borderWidth.join(' ');
+				styles['border-color'] = data.border_color
+				styles['border-style'] = data.border_style
+			}
+		}
+
+
+		styles['background-color'] = ( '' != data.bg_color ) ? data.bg_color : 'transparent';
+
+		if ( '' != data.id ) {
+			this.$el.attr( 'id', data.id );
+		}
+
+		classes.push( data['class'] );
+		this.$el.attr('class', classes.join(' '));
+		delete classes;
+
+		this.$el.removeAttr('style');
+		this.$el.css(styles);
+
+		if ( '' != data.style ) {
+			this.$el.attr('style', this.$el.attr('style') + data.style );
+		}
+
+		this.emptyClassCheck();
+	}
+
 })
-},{"../elements/section":104,"./observer.js":129}],131:[function(require,module,exports){
-module.exports = Mn.CollectionView.extend({
-  // className: 'cs-pane-content-inner',
+},{}],97:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	template: _.template('<div></div>'),
+
+	remoteRender: false,
+
+	minHeight: 3,
+
+	initialize: function() {
+		this.listenTo( this.model, 'change', this.render );
+		this.boundWindowResize = _.bind( this.onAddedToColumn, this );
+		Backbone.$(window).on( 'resize', this.boundWindowResize );
+	},
+
+	onDestroy: function( data ) {
+		Backbone.$(window).off( 'resize', this.boundWindowResize );
+	},
+
+	onConstructElement: function( data ) {
+
+		var classes, styles, visibility, customID, customStyle, size;
+		$gap = this.$('div');
+
+		classes = [ 'cs-empty-element', 'cs-gap' ];
+		styles = {};
+
+		classes = _.union( classes, data.visibility );
+
+		if ( '' != data.id ) $gap.attr( 'id', data.id );
+
+		classes.push(this.model.get('class'))
+		$gap.attr('class', classes.join(' '));
+
+		$gap.removeAttr('style');
+		$gap.css(styles);
+
+		if ( '' != data.style )
+			$gap.attr('style', $gap.attr('style') + data.style );
+
+		$gap.css({
+			'padding' : data.gap_size + ' 0 0',
+			'margin'  : 0,
+			'height'  : 0
+		});
+
+	},
+
+	onAddedToColumn: function() {
+
+		// Wait until other child views are rendered
+		_.defer( _.bind( function(){
+
+			$gap = this.$('div');
+
+			var size = this.model.get('gap_size');
+
+			$gap.css({
+				'padding' : size + ' 0 0',
+				'margin'  : 0,
+				'height'  : 0
+			});
+
+			if ($gap.outerHeight() < this.minHeight) {
+				$gap.css({'padding' : this.minHeight + 'px 0 0'});
+			}
+		}, this ) );
+
+	}
+
+});
+},{}],98:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+	onAfterElementRender: function(){
+
+		if( this.model.prevHeight ) {
+			this.$('.cs-empty-element').height(this.model.prevHeight);
+			this.model.prevHeight = false;
+		}
+
+		_.defer(_.bind( function() {
+
+			$map = this.$('.x-map');
+			if ($map.length > 0) {
+				this.model.prevHeight = $map.outerHeight();
+			}
+
+		}, this ) );
+
+	}
+});
+},{}],99:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	onAfterElementRender: function() {
+
+	}
+
+});
+},{}],100:[function(require,module,exports){
+module.exports = {
+
+	'section' : require('./section'),
+	'row'     : require('./row'),
+	'column'  : require('./column'),
+
+	'accordion'         : require('./accordion'),
+	'alert'             : require('./alert'),
+	'card'              : require('./card'),
+	'row'               : require('./row'),
+	'gap'               : require('./gap'),
+	'google-map'        : require('./google-map'),
+	'line'              : require('./line'),
+	'slider'            : require('./slider'),
+	'tabs'              : require('./tabs'),
+
+	// 3rd party
+	'gravity-forms'     : require('./gravity-forms'),
+}
+},{"./accordion":92,"./alert":93,"./card":95,"./column":96,"./gap":97,"./google-map":98,"./gravity-forms":99,"./line":101,"./row":102,"./section":103,"./slider":104,"./tabs":105}],101:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+  template: _.template('<hr class="x-hr">'),
+  remoteRender: false,
+
+  onRender: function() {
+
+    var $line, classes, visibility, customID, customStyle;
+    $line = this.$('hr');
+
+    classes = [ 'x-hr' ];
+
+    if (visibility = this.model.get('visibility')) {
+      classes = _.union( classes, visibility );
+    }
+
+    classes.push(this.model.get('class'))
+    $line.attr('class', classes.join(' '));
+
+    customID = this.model.get('custom_id');
+    if (customID) $line.attr( 'id', customID );
+
+    $line.removeAttr('style');
+    customStyle = this.model.get('style');
+    if (customStyle) $line.attr('style', customStyle );
+
+    // Replace margin with padding after this first render
+    // This helps make the line clickable in the preview window
+    _.defer(function(){
+
+      $line.css({
+        'paddingBottom' : $line.css('marginBottom'),
+        'marginBottom' : '0'
+      });
+
+    })
+
+
+  },
+
+});
+},{}],102:[function(require,module,exports){
+module.exports = Cornerstone.ElementViews.Base.extend({
+
+	remoteRender: false,
+	draggable: false,
+
+	filter: function (child, index, collection) {
+    return ( child.get('_active') );
+  },
+
+  onConstructElement: function( data ) {
+
+  	var classes, styles, visibility, textAlign, padding, margin, borderWidth, bgColor, customStyle, customID;
+
+  	classes = [ 'x-container' ];
+		styles = {};
+
+		if ( data.inner_container ) {
+			classes.push('max width')
+		}
+
+		classes = _.union( classes, data.visibility );
+
+		if ( 'none' != data.text_align ) {
+			classes.push(data.text_align);
+		}
+
+		if ( data.marginless_columns ) classes.push('marginless-columns');
+
+		if ( _.isArray( padding = _.clone( data.padding ) ) ) {
+			padding.pop();
+			styles['padding'] = padding.join(' ');
+		}
+
+		if ( _.isArray( margin = _.clone( data.margin ) ) ) {
+			margin.pop();
+			styles['margin'] = margin.join(' ');
+		}
+
+		if ( _.isArray( borderWidth = _.clone( data.border_width ) ) ) {
+			borderWidth.pop();
+			if ( _.unique(borderWidth) != '0px' ) {
+				styles['border-width'] = borderWidth.join(' ');
+				styles['border-color'] = data.border_color
+				styles['border-style'] = data.border_style
+			}
+		}
+
+		bgColor = this.model.get('bg_color')
+		styles['background-color'] = (bgColor) ? bgColor : 'transparent';
+
+
+		if ( '' != data.id ) {
+			this.$el.attr( 'id', data.id );
+		}
+
+		classes.push( data['class'] );
+		this.$el.attr('class', classes.join(' '));
+		delete classes;
+
+		this.$el.removeAttr('style');
+		this.$el.css(styles);
+
+		if ( '' != data.style ) {
+			this.$el.attr('style', this.$el.attr('style') + data.style );
+		}
+
+  }
+
+});
+},{}],103:[function(require,module,exports){
+module.exports = Cornerstone.ElementViews.Base.extend({
+
+	remoteRender: false,
+	draggable: false,
+
+	onElementInit: function() {
+
+		this.lazyDetectColorContrast = _.debounce( _.bind( this.detectColorContrast, this ), 25 );
+		this.lazyDetectImageContrast = _.debounce( _.bind( this.detectImageContrast, this ), 250 );
+
+		this.contrast = {
+			color: null,
+			image: null,
+			activeClass: null
+		}
+
+		this.listenTo( this.model, 'change:bg_color', function() {
+			this.contrast.color = null;
+		} );
+
+		this.listenTo( this.model, 'change:bg_image', function() {
+			this.contrast.image = null;
+		} );
+	},
+
+	onConstructElement: function( data ) {
+
+		var classes, styles, bgClass, padding, margin, borderWidth;
+		this.$el.attr('id', 'x-section-' + (this.modelIndex + 1) );
+
+		classes = [ 'x-section' ];
+		styles = {};
+		bgClass = '';
+
+		if (this.contrastClass) {
+			classes.push(this.contrastClass);
+		}
+
+		classes = _.union( classes, data.visibility );
+
+		if ( 'none' != data.text_align ) {
+			classes.push(data.text_align);
+		}
+
+		switch ( data.bg_type ) {
+			case 'video':
+				bgClass = 'bg-video';
+				break;
+			case 'image':
+
+				// Set Background class
+				bgClass = ( data.bg_pattern_toggle ) ? 'bg-pattern' : 'bg-image';
+				if ( data.parallax ) classes.push( 'parallax' );
+				if ( '' != data.bg_image ) styles['backgroundImage'] = 'url("' + data.bg_image +'")';
+				if ( _.isNull( this.contrast.image ) ) this.lazyDetectImageContrast( data.bg_image, data.bg_color );
+				if ( !_.isNull( this.contrast.activeClass) ) classes.push(this.contrast.activeClass);
+				styles['background-color'] = ( '' != data.bg_color ) ? data.bg_color : 'transparent';
+
+				break;
+			case 'color':
+
+				bgClass = 'bg-color';
+				if ( _.isNull( this.contrast.image ) ) this.lazyDetectColorContrast( data.bg_color );
+				if ( !_.isNull( this.contrast.activeClass) ) classes.push(this.contrast.activeClass);
+				styles['background-color'] = ( '' != data.bg_color ) ? data.bg_color : 'transparent';
+
+				break;
+
+		}
+
+		if ( bgClass ) classes.push(bgClass);
+
+		if ( _.isArray( padding = _.clone( data.padding ) ) ) {
+			padding.pop();
+			styles['padding'] = padding.join(' ');
+		}
+
+		if ( _.isArray( margin = _.clone( data.margin ) ) ) {
+			margin.pop();
+			styles['margin'] = margin.join(' ');
+		}
+
+		if ( _.isArray( borderWidth = _.clone( data.border_width ) ) ) {
+			borderWidth.pop();
+			if ( _.unique(borderWidth) != '0px' ) {
+				styles['border-width'] = borderWidth.join(' ');
+				styles['border-color'] = data.border_color
+				styles['border-style'] = data.border_style
+			}
+		}
+
+
+		if ( '' != data.id ) {
+			this.$el.attr( 'id', data.id );
+		}
+
+		classes.push( data['class'] );
+		this.$el.attr('class', classes.join(' '));
+		delete classes;
+
+		this.$el.removeAttr('style');
+		this.$el.css(styles);
+
+		if ( '' != data.style ) {
+			this.$el.attr('style', this.$el.attr('style') + data.style );
+		}
+
+
+		// Defer things that may depend on height.
+		_.defer( _.bind( function(){
+			if ( this.$el.hasClass('parallax') ) {
+		    if ( Modernizr && Modernizr.touchevents ) {
+		      this.$el.css('background-attachment', 'scroll');
+		    } else {
+		      if ( this.$el.hasClass('bg-image')   ) speed = 0.1;
+		      if ( this.$el.hasClass('bg-pattern') ) speed = 0.3;
+		      if ( speed ) this.$el.parallaxContentBand('50%', speed);
+		    }
+		  }
+
+		  if ( this.$el.hasClass('bg-video') ) {
+		  	this.$el.css({
+		  		'background-image': 'url("' + data.bg_video_poster +'")',
+		  		'background-color': 'white',
+		  		'background-size':  'cover'
+		  	});
+		  }
+	  }, this ) );
+	},
+
+	detectImageContrast: function( image, color ) {
+		_.defer( _.bind( function(){
+
+			if ( !image || image == '' ) {
+				this.detectColorContrast( color );
+				return;
+			}
+
+      window.RGBaster.colors( image, {
+			  success: _.bind( function(payload) {
+			    this.setContrastClass( payload.dominant );
+			  }, this )
+			});
+
+    }, this ) );
+	},
+
+	detectColorContrast: function( color ) {
+		if (!color || color == '')
+			color = '#ffffff';
+		this.setContrastClass( color );
+	},
+
+	setContrastClass:function( color ) {
+		var source = new Cornerstone.Vendor.Color( color );
+		var isDark = ( source.getDistanceLuminosityFrom( new Cornerstone.Vendor.Color( '#fff' ) ) > 10.5 );
+		this.contrast.activeClass = ( isDark ) ? 'cs-bg-dark' : null;
+		this.$el.toggleClass( 'cs-bg-dark', isDark );
+	}
+
+})
+},{}],104:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+	// emptyDetection: function() {
+ //    // Prevent empty detection
+ //  }
+});
+},{}],105:[function(require,module,exports){
+module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	onClickBeforeInspect: function( e ) {
+		$target = jQuery(e.target);
+		if ( $target.attr('data-toggle') == 'tab' ) {
+			jQuery.fn.tab.call( $target, 'show');
+		}
+	},
+
+});
+},{}],106:[function(require,module,exports){
+module.exports = CS.Mn.CollectionView.extend({
 	childView: require('./settings-section'),
 	events: {
 		'click .cs-pane-section-toggle': 'toggle'
@@ -7260,129 +6759,93 @@ module.exports = Mn.CollectionView.extend({
 
   }
 });
-},{"./settings-section":132}],132:[function(require,module,exports){
-module.exports = Mn.CompositeView.extend({
-	template: 'settings/section',
-	className: 'cs-settings-section',
-	childViewContainer: 'ul.cs-controls',
-	getChildView: function( item ) { return cs.controlLookup(item.get('controlType')); },
-	initialize:function() {
-		this.collection = this.model.controls;
-	},
-	onRender: function() {
-		if ( this.collection.isEmpty() )
-			this.$el.addClass('empty');
-	}
-});
-},{}],133:[function(require,module,exports){
-// Views.SettingsPane
-
-var ViewControlCollection = require('../controls/control-collection');
-var ControlCollection = require('../../data/models/control-collection');
-var SettingsCollection = require('./settings-collection');
+},{"./settings-section":108}],107:[function(require,module,exports){
 var ControlListView = require('../controls/control-collection');
-var EmptyControls = Mn.ItemView.extend({
-  tagName: 'li',
-  template: 'inspector/blank-state'
-});
+var SettingsCollectionView = require('./settings-collection');
+module.exports = CS.Mn.LayoutView.extend({
 
-var ViewBasePane = require('../main/base-pane');
-module.exports = ViewBasePane.extend({
-  className: 'cs-pane settings active',
-  template: 'settings/page-settings',
-  regions: {
-    Controls: '#setting-controls',
-  	Sections: '#setting-sections',
-  	Sub: '#settings-sub'
-  },
+	template: 'settings/content',
 
-  events: {
-    'click button.cs-builder-sub-back': 'closeSub',
+	regions: {
+    Controls: '#controls',
+    Sections: '#sections'
   },
 
   initialize: function() {
-
-    this.controls = new ControlCollection( [], { proxy: cs.data.request( 'get:post' ) } );
-
-    this.controls.add({
-      name: 'action',
-      controlType: 'settings-actions',
-      divider: true
-    });
-
-    this.listenTo(cs.navigate, 'sub:inspector', this.openSub );
 
   },
 
   onBeforeShow: function() {
 
-    this.Sub.empty();
+  	this.Controls.show( new ControlListView( {
+  		collection: cs.component('settings').getPrimaryControls(),
+  	}));
 
-     this.Controls.show( new ViewControlCollection( { collection: this.controls } ) );
+  	this.Sections.show( new SettingsCollectionView( {
+  		collection: cs.component('settings').getSettings()
+  	}));
 
-    if (!this.showSettings()) {
-    	var interval = setInterval( _.bind( function(){
-    	if (this.showSettings())
-    		clearInterval(interval);
-    	}, this ), 250 );
-    }
-
-  },
-
-  showSettings: function() {
-
-    var post = cs.data.request( 'get:post' );
-  	var collection = post.get( 'settings' );
-
-    if (collection) {
-    	this.Sections.show( new SettingsCollection( { collection: collection } ) );
-    	return true;
-    }
-
-    this.Sections.show( this.getLoadingView() );
-    return false;
-  },
-
-  getLoadingView: function() {
-    return new Mn.ItemView( {
-      tagName: 'ul',
-      className: 'cs-controls empty',
-      template: _.template("<li><span class=\"title\"><%= l18n('settings-loading') %></span></li>")
-    } );
-  },
-
-  closeSub: function() {
-    this.$('.cs-builder-sub').removeClass('active');
-    this.subTimeout = setTimeout(_.bind(function(){
-      if ( this && this.Sub)
-        this.Sub.empty();
-    }, this), 3000);
-
-  },
-
-  openSub: function( model ) {
-
-    cs.navigate.trigger( 'subpane:opened' );
-
-    clearTimeout(this.subTimeout);
-    var selected = cs.data.request('get:sub:inspector');
-    this.Sub.show( new ControlListView( {
-      collection: selected.collection,
-      autoFocus: selected.autoFocus,
-      element: selected.stub,
-      emptyView: EmptyControls,
-    } ) );
-    this.$('.cs-builder-sub').addClass('active').find('.cs-pane-content-inner').perfectScrollbar({
-      suppressScrollX     : true,
-      scrollYMarginOffset : 25
-    });
-
-    // Reset the Inspector heading
-    cs.navigate.reply('inspector:heading', false );
   }
 
 });
-},{"../../data/models/control-collection":12,"../controls/control-collection":44,"../main/base-pane":125,"./settings-collection":131}],134:[function(require,module,exports){
+},{"../controls/control-collection":36,"./settings-collection":106}],108:[function(require,module,exports){
+module.exports = CS.Mn.CompositeView.extend({
+	template: 'settings/section',
+	className: 'cs-settings-section',
+	childViewContainer: 'ul.cs-controls',
+	getChildView: function( item ) { return cs.controlLookup(item.get('type')); },
+
+	initialize: function() {
+		this.collection = this.model.inspect.controls;
+	},
+
+	onRender: function() {
+		if ( this.collection.isEmpty() )
+			this.$el.addClass('empty');
+	},
+
+	serializeData: function() {
+
+		return _.extend( CS.Mn.CompositeView.prototype.serializeData.apply(this,arguments), {
+			_section_title: this.model.section.get('ui').title
+		});
+
+	}
+});
+},{}],109:[function(require,module,exports){
+var ViewBasePane = require('../main/base-pane');
+var SettingsContentView = require('./settings-content');
+var ControlListView = require('../controls/control-collection');
+module.exports = ViewBasePane.extend({
+
+	name: 'settings',
+
+  initialize: function() {
+  	this.listenTo( cs.global, 'settings:ready', this.onShowContent );
+  },
+
+  onShowContent: function() {
+  	this.Content.show( ( cs.data.request( 'settings:ready' ) ) ? new SettingsContentView() : this.getLoadingView() );
+  },
+
+  getLoadingView: function() {
+    return new CS.Mn.ItemView( {
+      tagName: 'ul',
+      className: 'cs-controls empty',
+      template: _.template("<li class=\"cs-control-empty\"><span class=\"title\"><%= l18n('settings-loading') %></span></li>")
+    } );
+  },
+
+  onOpenSubItem: function() {
+
+  	this.Sub.show( new ControlListView( {
+  		collection: cs.component('inspector').getSecondaryControls(),
+  	}));
+
+  }
+
+});
+},{"../controls/control-collection":36,"../main/base-pane":86,"./settings-content":107}],110:[function(require,module,exports){
 var templates={};templates['controls/base']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -7391,23 +6854,23 @@ with (obj) {
 
  //builder/controls/base ;
 __p += '\n';
- if ( controlTitle ) { ;
+ if ( ui.title ) { ;
 __p += '\n<div class="cs-control-header">\n  <label ';
- if ( controlTooltip ) { ;
+ if ( ui.tooltip ) { ;
 __p += ' data-tooltip-message="' +
-((__t = ( controlTooltip )) == null ? '' : __t) +
+((__t = ( ui.tooltip )) == null ? '' : __t) +
 '" ';
  } ;
 __p += '>' +
-((__t = ( controlTitle )) == null ? '' : __t) +
+((__t = ( ui.title )) == null ? '' : __t) +
 '</label>\n</div>\n';
  } ;
 __p += '\n<input type="hidden" value="">\n' +
 ((__t = ( render( controlTemplate, arguments[0] ) )) == null ? '' : __t) +
 '\n';
- if ( subText ) { ;
+ if ( ui.message ) { ;
 __p += '\n<div class="cs-control-footer">\n  <span>' +
-((__t = ( subText )) == null ? '' : __t) +
+((__t = ( ui.message )) == null ? '' : __t) +
 '</span>\n</div>\n';
  } ;
 
@@ -7468,7 +6931,7 @@ with (obj) {
 __p += '\n<ul class="cs-column-layout">\n  <li class="prefab" data-layout="1/1"><span class="cs-1-1">1/1</span></li>\n  <li class="prefab" data-layout="1/2 + 1/2"><span class="cs-1-2">1/2</span><span class="cs-1-2">1/2</span></li>\n  <li class="prefab" data-layout="1/3 + 2/3" ><span class="cs-1-3">1/3</span><span class="cs-2-3">2/3</span></li>\n  <li class="prefab" data-layout="2/3 + 1/3"><span class="cs-2-3">2/3</span><span class="cs-1-3">1/3</span></li>\n  <li class="prefab" data-layout="1/3 + 1/3 + 1/3"><span class="cs-1-3">1/3</span><span class="cs-1-3">1/3</span><span class="cs-1-3">1/3</span></li>\n  <li class="prefab" data-layout="1/4 + 1/4 + 1/4 + 1/4"><span class="cs-1-4">1/4</span><span class="cs-1-4">1/4</span><span class="cs-1-4">1/4</span><span class="cs-1-4">1/4</span></li>\n  <li class="prefab" data-layout="1/5 + 1/5 + 1/5 + 1/5 + 1/5"><span class="cs-1-5">1/5</span><span class="cs-1-5">1/5</span><span class="cs-1-5">1/5</span><span class="cs-1-5">1/5</span><span class="cs-1-5">1/5</span></li>\n  <li class="custom"><span class="cs-1-1 custom"><span>' +
 ((__t = ( cs.l18n('columns-layout-custom') )) == null ? '' : __t) +
 '</span></span></li>\n</ul>\n<input type="text" id="column-layout" value="' +
-((__t = ( columnLayout )) == null ? '' : __t) +
+((__t = ( _column_layout )) == null ? '' : __t) +
 '">';
 
 }
@@ -7481,7 +6944,7 @@ with (obj) {
 
  //builder/controls/column-layout ;
 __p += '\n<span class="handle"><span>' +
-((__t = ( title )) == null ? '' : __t) +
+((__t = ( size )) == null ? '' : __t) +
 '</span></span>';
 
 }
@@ -7531,23 +6994,6 @@ __p += '\n<ul class="cs-dimensions">\n  <li><input data-edge="top"    type="text
 '"></i>\n      <i class="cs-icon unlink" data-cs-icon="&#xf127;" title="' +
 ((__t = ( l18n('dimensions-link') )) == null ? '' : __t) +
 '"></i>\n    </button>\n  </li>\n</ul>';
-
-}
-return __p
-};templates['controls/element-info']=function (obj) {
-obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
-with (obj) {
-
- if ( controlTitle ) { ;
-__p += '\n<h4>' +
-((__t = ( controlTitle )) == null ? '' : __t) +
-'</h4>\n';
- } ;
-__p += '\n<p>' +
-((__t = ( controlTooltip )) == null ? '' : __t) +
-'</p>';
 
 }
 return __p
@@ -7603,6 +7049,27 @@ __p += '\n<div class="cs-image">\n	<i class="cs-icon add" data-cs-icon="' +
 '"></i>\n	<i class="cs-icon remove" data-cs-icon="' +
 ((__t = ( fontIcon('times-circle') )) == null ? '' : __t) +
 '"></i>\n</div>';
+
+}
+return __p
+};templates['controls/info-box']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+
+ if ( ui.title ) { ;
+__p += '<h4>' +
+((__t = ( ui.title )) == null ? '' : __t) +
+'</h4>';
+ } ;
+__p += '\n';
+ if ( ui.message ) { ;
+__p += '<p>' +
+((__t = ( ui.message )) == null ? '' : __t) +
+'</p>';
+ } ;
+
 
 }
 return __p
@@ -7732,9 +7199,9 @@ __p += '\n		<option value="' +
 '</option>\n	';
  }); ;
 __p += '\n</select>\n<button class="' +
-((__t = ( templateType )) == null ? '' : __t) +
+((__t = ( options.templateType )) == null ? '' : __t) +
 '">' +
-((__t = ( buttonText )) == null ? '' : __t) +
+((__t = ( ui.buttonText )) == null ? '' : __t) +
 '</button>';
 
 }
@@ -7773,13 +7240,13 @@ var __t, __p = '', __j = Array.prototype.join;
 function print() { __p += __j.call(arguments, '') }
 with (obj) {
 __p += '<div class="cs-title ';
- if (showButton) { ;
+ if (options.showInspectButton) { ;
 __p += 'inspectable';
  } ;
 __p += '">\n	<input type="text" class="cs-title-input" value="' +
 ((__t = ( title )) == null ? '' : __t) +
 '"></input>\n	';
- if (showButton) { ;
+ if (options.showInspectButton) { ;
 __p += '\n	<button class="cs-title-button" title="' +
 ((__t = ( l18n('tooltip-inspect') )) == null ? '' : __t) +
 '"><i class="cs-icon" data-cs-icon="&#xf002;"></i></button>\n	';
@@ -7811,111 +7278,6 @@ with (obj) {
 
  //builder/controls/select ;
 __p += '\n<div class="cs-wp-select"></div>';
-
-}
-return __p
-};templates['inspector/blank-state']=function (obj) {
-obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
-with (obj) {
-
- //builder/inspector/blank-state ;
-__p += '\n' +
-((__t = ( cs.icon('logo-flat-custom') )) == null ? '' : __t) +
-'\n<span class="title">Nothing Selected</span>\n<span>Click on an element in the site preview to begin inspecting it.</span>';
-
-}
-return __p
-};templates['inspector/breadcrumbs']=function (obj) {
-obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
-with (obj) {
-
- if ( count > 0 ) { ;
-__p += '\n  <button data-level="0" ';
- if ( items.length == 1 ) { print('class="disabled"') } ;
-__p += '>';
- print((items.length == 1) ? _.first( items ).title : _.first( items ).label ) ;
-__p += '</button>\n  ';
- _.each( _.rest( items ), function(item,index) { ;
-__p += '\n  	<span><i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon( (rtl) ? 'angle-left' : 'angle-right' ) )) == null ? '' : __t) +
-'"></i></span>\n  	<button ';
- if ( count == index+2 ) { print('class="disabled"') } ;
-__p += ' data-level="' +
-((__t = ( index + 1 )) == null ? '' : __t) +
-'" >' +
-((__t = ( item.label )) == null ? '' : __t) +
-'</button>\n  ';
- }) ;
-__p += '\n';
- } ;
-
-
-}
-return __p
-};templates['inspector/column-actions']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('bars') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-manage-layout') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action erase">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('eraser') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-erase') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
-
-}
-return __p
-};templates['inspector/element-actions']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action duplicate">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('copy') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-duplicate') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action delete">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('trash-o') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-delete') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
-
-}
-return __p
-};templates['inspector/inspector']=function (obj) {
-obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
-with (obj) {
-
- //builder/inspector/inspector ;
-__p += '\n<h2>' +
-((__t = ( heading )) == null ? '' : __t) +
-'</h2>\n<div class="cs-pane-content-outer">\n	<div id="inspector-controls" class="cs-pane-content-inner"></div>\n</div>\n<div class="cs-builder-sub inspector ">\n  <button class="cs-builder-sub-back">\n  <i class="cs-icon" data-cs-icon="&#xf053;"></i>\n  <span>' +
-((__t = ( l18n('inspector-return') )) == null ? '' : __t) +
-'</span>\n	</button>\n	<div class="cs-pane-content-outer">\n		<div class="cs-pane-content-inner">\n			<div id="inspector-sub" class="cs-pane-section"></div>\n		</div>\n	</div>\n</div>\n';
-
-}
-return __p
-};templates['inspector/row-actions']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('bars') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-manage-layout') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action delete">\n    <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('trash-o') )) == null ? '' : __t) +
-'"></i>\n    <span>' +
-((__t = ( l18n('inspector-delete') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
 
 }
 return __p
@@ -8042,22 +7404,105 @@ __p += '\n<p class="message">' +
 
 }
 return __p
-};templates['library/element-library']=function (obj) {
+};templates['layout/actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
+((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
+((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
+
+}
+return __p
+};templates['inspector/blank-state']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
 function print() { __p += __j.call(arguments, '') }
 with (obj) {
 
- //builder/library/element-library ;
-__p += '\n<h2>' +
-((__t = ( l18n('elements-heading') )) == null ? '' : __t) +
-'</h2>\n<div class="cs-pane-content-outer">\n	<div class="cs-search-section">\n    <div class="cs-search">\n      <input type="search" placeholder="' +
-((__t = ( l18n('elements-search') )) == null ? '' : __t) +
-'" id="elements-search">\n      <i class="cs-icon" data-cs-icon="' +
-((__t = ( fontIcon('search') )) == null ? '' : __t) +
-'"></i>\n    </div>\n  </div>\n	<div class="cs-pane-content-inner" style="right:0px;">\n\n		<div id="elements-library" class="cs-pane-section"></div>\n\n\n		<div class="cs-builder-sub elements">\n			<button class="cs-builder-sub-back">\n		  	<i class="cs-icon" data-cs-icon="&#xf053;"></i>\n		  	<span>' +
-((__t = ( l18n('elements-return') )) == null ? '' : __t) +
-'</span>\n		  </button>\n			<div id="elements-sub" class="cs-pane-content"></div>\n		</div>\n	</div>\n</div>';
+ //builder/inspector/blank-state ;
+__p += '\n' +
+((__t = ( cs.icon('logo-flat-custom') )) == null ? '' : __t) +
+'\n<span class="title">Nothing Selected</span>\n<span>Click on an element in the site preview to begin inspecting it.</span>';
+
+}
+return __p
+};templates['inspector/breadcrumbs']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+
+ if ( count > 0 ) { ;
+__p += '\n  <button data-level="0" ';
+ if ( items.length == 1 ) { print('class="disabled"') } ;
+__p += '>';
+ print((items.length == 1) ? _.first( items ).title : _.first( items ).label ) ;
+__p += '</button>\n  ';
+ _.each( _.rest( items ), function(item,index) { ;
+__p += '\n  	<span><i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon( (rtl) ? 'angle-left' : 'angle-right' ) )) == null ? '' : __t) +
+'"></i></span>\n  	<button ';
+ if ( count == index+2 ) { print('class="disabled"') } ;
+__p += ' data-level="' +
+((__t = ( index + 1 )) == null ? '' : __t) +
+'" >' +
+((__t = ( item.label )) == null ? '' : __t) +
+'</button>\n  ';
+ }) ;
+__p += '\n';
+ } ;
+
+
+}
+return __p
+};templates['inspector/column-actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('bars') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-manage-layout') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action erase">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('eraser') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-erase') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
+
+}
+return __p
+};templates['inspector/element-actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action duplicate">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('copy') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-duplicate') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action delete">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('trash-o') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-delete') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
+
+}
+return __p
+};templates['inspector/row-actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('bars') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-manage-layout') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action delete">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('trash-o') )) == null ? '' : __t) +
+'"></i>\n    <span>' +
+((__t = ( l18n('inspector-delete') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
 
 }
 return __p
@@ -8071,35 +7516,20 @@ with (obj) {
 __p += '\n<span class="icon">' +
 ((__t = ( icon )) == null ? '' : __t) +
 '</span>\n<span class="name"><span>' +
-((__t = ( title )) == null ? '' : __t) +
+((__t = ( ui.title )) == null ? '' : __t) +
 '</span></span>';
 
 }
 return __p
-};templates['layout/actions']=function (obj) {
+};templates['library/search']=function (obj) {
 obj || (obj = {});
 var __t, __p = '';
 with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
-((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
-((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
-
-}
-return __p
-};templates['layout/layout']=function (obj) {
-obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
-with (obj) {
-
- //builder/layout/layout ;
-__p += '\n<h2>' +
-((__t = ( l18n('layout-heading') )) == null ? '' : __t) +
-'</h2>\n<div class="cs-pane-content-outer">\n  <div id="layout-controls" class="cs-pane-content-inner" style="right:0px;">\n    <div class="cs-pane-section"></div>\n  </div>\n</div>\n<div class="cs-builder-sub layout">\n  <button class="cs-builder-sub-back">\n    <i class="cs-icon" data-cs-icon="&#xf053;"></i> <span>' +
-((__t = ( l18n('layout-return') )) == null ? '' : __t) +
-'</span>\n  </button>\n  <div id="layout-sub" class="cs-pane-content-outer"></div>\n</div>';
+__p += '<div class="cs-search-section">\n  <div class="cs-search">\n    <input type="search" placeholder="' +
+((__t = ( l18n('elements-search') )) == null ? '' : __t) +
+'" id="elements-search">\n    <i class="cs-icon" data-cs-icon="' +
+((__t = ( fontIcon('search') )) == null ? '' : __t) +
+'"></i>\n  </div>\n</div>';
 
 }
 return __p
@@ -8162,6 +7592,27 @@ __p += '\n<button class="layout">' +
 
 }
 return __p
+};templates['main/pane']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+__p += '<h2>' +
+((__t = ( heading )) == null ? '' : __t) +
+'</h2>\n<div class="cs-pane-content-outer">\n	';
+ if ( paneTemplate ) { ;
+__p += '\n		' +
+((__t = ( render( paneTemplate, arguments[0] ) )) == null ? '' : __t) +
+'\n	';
+ } ;
+__p += '\n  <div id="content" class="cs-pane-content-inner" style="right:0px;"></div>\n</div>\n<div class="cs-builder-sub ' +
+((__t = ( name )) == null ? '' : __t) +
+'">\n  <button class="cs-builder-sub-back">\n    <i class="cs-icon" data-cs-icon="&#xf053;"></i> <span>' +
+((__t = ( returnButtonText )) == null ? '' : __t) +
+'</span>\n  </button>\n  <div class="cs-pane-content-outer">\n  	<div id="sub" class="cs-pane-content-inner"></div>\n  </div>\n</div>\n\n\n';
+
+}
+return __p
 };templates['settings/actions']=function (obj) {
 obj || (obj = {});
 var __t, __p = '';
@@ -8178,18 +7629,14 @@ __p += '<ul class="cs-actions">\n  <li class="action css">\n    <i class="cs-ico
 
 }
 return __p
-};templates['settings/page-settings']=function (obj) {
+};templates['settings/content']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
 function print() { __p += __j.call(arguments, '') }
 with (obj) {
 
  //builder/settings/page-settings ;
-__p += '\n<h2>' +
-((__t = ( l18n('settings-heading') )) == null ? '' : __t) +
-'</h2>\n<div class="cs-pane-content-outer">\n	<div class="cs-pane-content-inner">\n  	<div id="setting-controls"></div>\n  	<div id="setting-sections"></div>\n	</div>\n<div class="cs-builder-sub settings ">\n  <button class="cs-builder-sub-back">\n  <i class="cs-icon" data-cs-icon="&#xf053;"></i>\n  <span>' +
-((__t = ( l18n('settings-return') )) == null ? '' : __t) +
-'</span>\n	</button>\n	<div class="cs-pane-content-outer">\n		<div class="cs-pane-content-inner">\n			<div id="settings-sub" class="cs-pane-section"></div>\n		</div>\n	</div>\n</div>';
+__p += '\n<div id="controls"></div>\n<div id="sections"></div>';
 
 }
 return __p
@@ -8198,7 +7645,7 @@ obj || (obj = {});
 var __t, __p = '';
 with (obj) {
 __p += '<h3 class="cs-pane-section-toggle">' +
-((__t = ( title )) == null ? '' : __t) +
+((__t = ( _section_title )) == null ? '' : __t) +
 '</h3>\n<div class="cs-pane-section">\n	<ul class="cs-controls"></ul>\n</div>';
 
 }
@@ -8211,26 +7658,6 @@ with (obj) {
 
  //builder/layout/sub-row/layout-sub-row ;
 __p += '\n<div id="layout-row-controls" class="cs-pane-section controls"></div>\n<div id="layout-column-controls" class="cs-pane-section controls"></div>';
-
-}
-return __p
-};templates['layout/sub-templates/accordion']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<h3 class="cs-pane-section-toggle">' +
-((__t = ( title )) == null ? '' : __t) +
-'</h3>\n<div class="cs-pane-section">\n	<ul class="cs-controls"></ul>\n</div>';
-
-}
-return __p
-};templates['layout/sub-templates/block-item']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<div class="cs-template">' +
-((__t = ( title )) == null ? '' : __t) +
-'</div>';
 
 }
 return __p
@@ -8286,7 +7713,7 @@ __p += '<input id="template-upload" type="file" name="blockUpload"/>\n<button cl
 }
 return __p
 };module.exports=templates;
-},{}],135:[function(require,module,exports){
+},{}],111:[function(require,module,exports){
 var templates={};templates['dragging-placeholder']=function (obj) {
 obj || (obj = {});
 var __t, __p = '';
@@ -8314,7 +7741,7 @@ with (obj) {
 
  // elements/empty-element ;
 __p += '\n<div class="cs-empty-element">\n  <div class="cs-empty-element-icon">\n    ' +
-((__t = ( cs.icon("element-" + name ) )) == null ? '' : __t) +
+((__t = ( cs.icon("element-" + _type ) )) == null ? '' : __t) +
 '\n  </div>\n</div>';
 
 }
@@ -8360,7 +7787,7 @@ __p += '<div class="cs-observer-tooltip top left">' +
 }
 return __p
 };module.exports=templates;
-},{}],136:[function(require,module,exports){
+},{}],112:[function(require,module,exports){
 var templates={};templates['element-accordion']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -8614,6 +8041,28 @@ __p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/200
 
 }
 return __p
+};templates['element-envira-gallery']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+
+ // icons/element-envira-gallery ;
+__p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-1388 3226 30 30" style="enable-background:new -1388 3226 30 30;" xml:space="preserve">\n  <g>\n    <path d="M-1371.2,3240.1c-1.9-4.3-3.7-8.8-10.7-10.1c-0.2,0-0.5,0.1-0.5,0.3c-0.1,0.2,0,0.4,0.1,0.6c3.8,3.3,5.1,6,6.2,8.4c1.5,3.1,2.8,5.8,8.9,8.7c0.1,0,0.1,0,0.2,0c0.2,0,0.3-0.1,0.4-0.2c0.1-0.2,0.1-0.5-0.1-0.7C-1369,3245.4-1370.1,3242.8-1371.2,3240.1z M-1375.2,3238.8c-1-2.1-2.2-4.5-5.1-7.4c5,1.5,6.5,5.2,8.1,9.1c0.7,1.7,1.5,3.5,2.6,5C-1373,3243.4-1374,3241.3-1375.2,3238.8z"/>\n    <path d="M-1364.9,3248.6c1.4-5.8,0.8-10.5-1.7-13.9c-3.2-4.2-9.4-6.4-18.9-6.7h-0.8l0.3,0.7c0.5,1.1,0.9,2.7,1.3,4.6c1.6,6.7,3.9,16.7,14.6,16.7c1.4,0,2.9-0.2,4.4-0.5l4.2,4h1.5L-1364.9,3248.6z M-1365.9,3248.6c-1.5,0.3-2.9,0.5-4.2,0.5c-9.9-0.1-12-9.3-13.6-16c-0.3-1.6-0.7-3-1.1-4.1c8.8,0.4,14.5,2.5,17.4,6.3C-1365.1,3238.5-1364.6,3242.9-1365.9,3248.6z"/>\n  </g>\n</svg>';
+
+}
+return __p
+};templates['element-essential-grid']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+
+ // icons/element-essential-grid ;
+__p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-1388 3226 30 30" style="enable-background:new -1388 3226 30 30;" xml:space="preserve">\n  <g>\n    <path d="M-1363.5,3228h-19c-1.9,0-3.5,1.6-3.5,3.5v19c0,1.9,1.6,3.5,3.5,3.5h19c1.9,0,3.5-1.6,3.5-3.5v-19C-1360,3229.6-1361.6,3228-1363.5,3228z M-1361,3250.5c0,1.4-1.1,2.5-2.5,2.5h-19c-1.4,0-2.5-1.1-2.5-2.5v-19c0-1.4,1.1-2.5,2.5-2.5h19c1.4,0,2.5,1.1,2.5,2.5V3250.5z"/>\n    <path d="M-1374.6,3233.5h-4.8c-0.6,0-1.1,0.5-1.1,1.1v4.8c0,0.6,0.5,1.1,1.1,1.1h4.8c0.6,0,1.1-0.5,1.1-1.1v-4.8C-1373.5,3234-1374,3233.5-1374.6,3233.5z M-1374.5,3239.4c0,0.1,0,0.1-0.1,0.1h-4.8c-0.1,0-0.1,0-0.1-0.1v-4.8c0-0.1,0-0.1,0.1-0.1h4.8c0.1,0,0.1,0,0.1,0.1C-1374.5,3234.6-1374.5,3239.4-1374.5,3239.4z"/>\n    <path d="M-1366.6,3233.5h-4.8c-0.6,0-1.1,0.5-1.1,1.1v4.8c0,0.6,0.5,1.1,1.1,1.1h4.8c0.6,0,1.1-0.5,1.1-1.1v-4.8C-1365.5,3234-1366,3233.5-1366.6,3233.5z M-1366.5,3239.4C-1366.5,3239.5-1366.5,3239.5-1366.5,3239.4l-4.9,0.1c-0.1,0-0.1,0-0.1-0.1v-4.8c0-0.1,0-0.1,0.1-0.1h4.8c0.1,0,0.1,0,0.1,0.1C-1366.5,3234.6-1366.5,3239.4-1366.5,3239.4z"/>\n    <path d="M-1374.6,3241.5h-4.8c-0.6,0-1.1,0.5-1.1,1.1v4.8c0,0.6,0.5,1.1,1.1,1.1h4.8c0.6,0,1.1-0.5,1.1-1.1v-4.8C-1373.5,3242-1374,3241.5-1374.6,3241.5z M-1374.5,3247.4c0,0.1,0,0.1-0.1,0.1h-4.8c-0.1,0-0.1,0-0.1-0.1v-4.8c0-0.1,0-0.1,0.1-0.1h4.8c0.1,0,0.1,0,0.1,0.1C-1374.5,3242.6-1374.5,3247.4-1374.5,3247.4z"/>\n    <path d="M-1366.6,3241.5h-4.8c-0.6,0-1.1,0.5-1.1,1.1v4.8c0,0.6,0.5,1.1,1.1,1.1h4.8c0.6,0,1.1-0.5,1.1-1.1v-4.8C-1365.5,3242-1366,3241.5-1366.6,3241.5z M-1366.5,3247.4C-1366.5,3247.5-1366.5,3247.5-1366.5,3247.4l-4.9,0.1c-0.1,0-0.1,0-0.1-0.1v-4.8c0-0.1,0-0.1,0.1-0.1h4.8c0.1,0,0.1,0,0.1,0.1C-1366.5,3242.6-1366.5,3247.4-1366.5,3247.4z"/>\n  </g>\n</svg>';
+
+}
+return __p
 };templates['element-feature-box']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -8743,6 +8192,17 @@ with (obj) {
 
  // icons/element-interactive-banner ;
 __p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-290 382 30 30" enable-background="new -290 382 30 30" xml:space="preserve">\n  <g>\n    <path d="M-265,385h-21v9h21V385z M-266,393h-19v-7h19V393z"/>\n    <path d="M-282.5,391h10c0.3,0,0.5-0.2,0.5-0.5s-0.2-0.5-0.5-0.5h-10c-0.3,0-0.5,0.2-0.5,0.5S-282.8,391-282.5,391z"/>\n    <path d="M-282.5,403h10c0.3,0,0.5-0.2,0.5-0.5s-0.2-0.5-0.5-0.5h-10c-0.3,0-0.5,0.2-0.5,0.5S-282.8,403-282.5,403z"/>\n    <path d="M-269,404.5c0-0.3-0.2-0.5-0.5-0.5h-11c-0.3,0-0.5,0.2-0.5,0.5s0.2,0.5,0.5,0.5h11C-269.2,405-269,404.8-269,404.5z"/>\n    <path d="M-282.5,407h11c0.3,0,0.5-0.2,0.5-0.5s-0.2-0.5-0.5-0.5h-11c-0.3,0-0.5,0.2-0.5,0.5S-282.8,407-282.5,407z"/>\n    <polygon points="-281.6,395.6 -282.4,396.4 -279.5,399.2 -276.6,396.4 -277.4,395.6 -279.5,397.8 	"/>\n    <path d="M-263.1,406.1l-2.2-2.1h1.3v-1h-3v3h1v-1.3l2.1,2.1c0.1,0.1,0.2,0.1,0.4,0.1s0.3,0,0.4-0.1C-263,406.7-263,406.3-263.1,406.1z"/>\n    <path d="M-265.5,407c-0.3,0-0.5,0.2-0.5,0.5v0.5h-19v-7h19v0.5c0,0.3,0.2,0.5,0.5,0.5s0.5-0.2,0.5-0.5V400h-21v9h21v-1.5C-265,407.2-265.2,407-265.5,407z"/>\n  </g>\n</svg>';
+
+}
+return __p
+};templates['element-layerslider']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+
+ // icons/element-layerslider ;
+__p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-1388 3226 30 30" style="enable-background:new -1388 3226 30 30;" xml:space="preserve">\n  <g>\n    <path d="M-1373,3243.2l6.9-6.9c0.3-0.3,0.4-0.7,0.4-1.1c0-0.4-0.2-0.8-0.4-1.1l-5.8-5.8c-0.6-0.6-1.6-0.6-2.2,0l-5.8,5.9c-0.3,0.3-0.4,0.7-0.4,1.1c0,0.4,0.2,0.8,0.4,1.1L-1373,3243.2z M-1379.2,3234.9l5.8-5.8c0.1-0.1,0.3-0.1,0.4-0.1s0.3,0.1,0.4,0.2l5.8,5.8c0.1,0.1,0.2,0.2,0.2,0.4c0,0.1-0.1,0.3-0.2,0.4l-6.2,6l-6.2-6.2c-0.1-0.1-0.1-0.2-0.1-0.3C-1379.3,3235.2-1379.3,3235-1379.2,3234.9z"/>\n    <path d="M-1360.4,3239.9l-2.6-2.6c-0.6-0.6-1.5-0.6-2.1,0l-7.9,7.5l-7.6-7.6c-0.4-0.4-0.8-0.5-1.1-0.5c-0.6,0-1.1,0.4-1.3,0.9s-0.1,0.9,0.2,1.3l9.5,9.5c0.2,0.2,0.5,0.2,0.7,0l8.6-8.2l0.8,0.8l-9.8,9.8l-10.7-10.7c-0.7-0.7-1.8-0.5-2.3,0.3c-0.2,0.4-0.2,0.9,0,1.3c0,0,0,0.1,0.1,0.1l11.8,11.8c0.3,0.3,0.7,0.4,1.1,0.4s0.8-0.2,1.1-0.4l11.6-11.6C-1359.8,3241.5-1359.8,3240.5-1360.4,3239.9z M-1361.1,3241.4l-11.5,11.5c-0.2,0.2-0.5,0.2-0.7,0l-11.8-11.7c0-0.1,0-0.2,0-0.3c0.1-0.2,0.5-0.3,0.7-0.1l11,11c0.2,0.2,0.5,0.2,0.7,0l10.5-10.5c0.2-0.2,0.2-0.5,0-0.7l-1.5-1.5c-0.2-0.2-0.5-0.2-0.7,0l-8.6,8.2l-9.1-9.1c0-0.1,0-0.2,0-0.2c0.1-0.2,0.4-0.5,0.8-0.1l8,8c0.2,0.2,0.5,0.2,0.7,0l8.3-7.8c0.2-0.2,0.5-0.2,0.7,0l2.6,2.6C-1360.9,3240.8-1360.9,3241.2-1361.1,3241.4z"/>\n  </g>\n</svg>';
 
 }
 return __p
@@ -9121,857 +8581,7 @@ __p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/200
 }
 return __p
 };module.exports=templates;
-},{}],137:[function(require,module,exports){
-/* FileSaver.js
- * A saveAs() FileSaver implementation.
- * 1.1.20150716
- *
- * By Eli Grey, http://eligrey.com
- * License: X11/MIT
- *   See https://github.com/eligrey/FileSaver.js/blob/master/LICENSE.md
- */
-
-/*global self */
-/*jslint bitwise: true, indent: 4, laxbreak: true, laxcomma: true, smarttabs: true, plusplus: true */
-
-/*! @source http://purl.eligrey.com/github/FileSaver.js/blob/master/FileSaver.js */
-
-var saveAs = saveAs || (function(view) {
-  "use strict";
-  // IE <10 is explicitly unsupported
-  if (typeof navigator !== "undefined" && /MSIE [1-9]\./.test(navigator.userAgent)) {
-    return;
-  }
-  var
-      doc = view.document
-      // only get URL when necessary in case Blob.js hasn't overridden it yet
-    , get_URL = function() {
-      return view.URL || view.webkitURL || view;
-    }
-    , save_link = doc.createElementNS("http://www.w3.org/1999/xhtml", "a")
-    , can_use_save_link = "download" in save_link
-    , click = function(node) {
-      var event = new MouseEvent("click");
-      node.dispatchEvent(event);
-    }
-    , webkit_req_fs = view.webkitRequestFileSystem
-    , req_fs = view.requestFileSystem || webkit_req_fs || view.mozRequestFileSystem
-    , throw_outside = function(ex) {
-      (view.setImmediate || view.setTimeout)(function() {
-        throw ex;
-      }, 0);
-    }
-    , force_saveable_type = "application/octet-stream"
-    , fs_min_size = 0
-    // See https://code.google.com/p/chromium/issues/detail?id=375297#c7 and
-    // https://github.com/eligrey/FileSaver.js/commit/485930a#commitcomment-8768047
-    // for the reasoning behind the timeout and revocation flow
-    , arbitrary_revoke_timeout = 500 // in ms
-    , revoke = function(file) {
-      var revoker = function() {
-        if (typeof file === "string") { // file is an object URL
-          get_URL().revokeObjectURL(file);
-        } else { // file is a File
-          file.remove();
-        }
-      };
-      if (view.chrome) {
-        revoker();
-      } else {
-        setTimeout(revoker, arbitrary_revoke_timeout);
-      }
-    }
-    , dispatch = function(filesaver, event_types, event) {
-      event_types = [].concat(event_types);
-      var i = event_types.length;
-      while (i--) {
-        var listener = filesaver["on" + event_types[i]];
-        if (typeof listener === "function") {
-          try {
-            listener.call(filesaver, event || filesaver);
-          } catch (ex) {
-            throw_outside(ex);
-          }
-        }
-      }
-    }
-    , auto_bom = function(blob) {
-      // prepend BOM for UTF-8 XML and text/* types (including HTML)
-      if (/^\s*(?:text\/\S*|application\/xml|\S*\/\S*\+xml)\s*;.*charset\s*=\s*utf-8/i.test(blob.type)) {
-        return new Blob(["\ufeff", blob], {type: blob.type});
-      }
-      return blob;
-    }
-    , FileSaver = function(blob, name, no_auto_bom) {
-      if (!no_auto_bom) {
-        blob = auto_bom(blob);
-      }
-      // First try a.download, then web filesystem, then object URLs
-      var
-          filesaver = this
-        , type = blob.type
-        , blob_changed = false
-        , object_url
-        , target_view
-        , dispatch_all = function() {
-          dispatch(filesaver, "writestart progress write writeend".split(" "));
-        }
-        // on any filesys errors revert to saving with object URLs
-        , fs_error = function() {
-          // don't create more object URLs than needed
-          if (blob_changed || !object_url) {
-            object_url = get_URL().createObjectURL(blob);
-          }
-          if (target_view) {
-            target_view.location.href = object_url;
-          } else {
-            var new_tab = view.open(object_url, "_blank");
-            if (new_tab == undefined && typeof safari !== "undefined") {
-              //Apple do not allow window.open, see http://bit.ly/1kZffRI
-              view.location.href = object_url
-            }
-          }
-          filesaver.readyState = filesaver.DONE;
-          dispatch_all();
-          revoke(object_url);
-        }
-        , abortable = function(func) {
-          return function() {
-            if (filesaver.readyState !== filesaver.DONE) {
-              return func.apply(this, arguments);
-            }
-          };
-        }
-        , create_if_not_found = {create: true, exclusive: false}
-        , slice
-      ;
-      filesaver.readyState = filesaver.INIT;
-      if (!name) {
-        name = "download";
-      }
-      if (can_use_save_link) {
-        object_url = get_URL().createObjectURL(blob);
-        save_link.href = object_url;
-        save_link.download = name;
-        setTimeout(function() {
-          click(save_link);
-          dispatch_all();
-          revoke(object_url);
-          filesaver.readyState = filesaver.DONE;
-        });
-        return;
-      }
-      // Object and web filesystem URLs have a problem saving in Google Chrome when
-      // viewed in a tab, so I force save with application/octet-stream
-      // http://code.google.com/p/chromium/issues/detail?id=91158
-      // Update: Google errantly closed 91158, I submitted it again:
-      // https://code.google.com/p/chromium/issues/detail?id=389642
-      if (view.chrome && type && type !== force_saveable_type) {
-        slice = blob.slice || blob.webkitSlice;
-        blob = slice.call(blob, 0, blob.size, force_saveable_type);
-        blob_changed = true;
-      }
-      // Since I can't be sure that the guessed media type will trigger a download
-      // in WebKit, I append .download to the filename.
-      // https://bugs.webkit.org/show_bug.cgi?id=65440
-      if (webkit_req_fs && name !== "download") {
-        name += ".download";
-      }
-      if (type === force_saveable_type || webkit_req_fs) {
-        target_view = view;
-      }
-      if (!req_fs) {
-        fs_error();
-        return;
-      }
-      fs_min_size += blob.size;
-      req_fs(view.TEMPORARY, fs_min_size, abortable(function(fs) {
-        fs.root.getDirectory("saved", create_if_not_found, abortable(function(dir) {
-          var save = function() {
-            dir.getFile(name, create_if_not_found, abortable(function(file) {
-              file.createWriter(abortable(function(writer) {
-                writer.onwriteend = function(event) {
-                  target_view.location.href = file.toURL();
-                  filesaver.readyState = filesaver.DONE;
-                  dispatch(filesaver, "writeend", event);
-                  revoke(file);
-                };
-                writer.onerror = function() {
-                  var error = writer.error;
-                  if (error.code !== error.ABORT_ERR) {
-                    fs_error();
-                  }
-                };
-                "writestart progress write abort".split(" ").forEach(function(event) {
-                  writer["on" + event] = filesaver["on" + event];
-                });
-                writer.write(blob);
-                filesaver.abort = function() {
-                  writer.abort();
-                  filesaver.readyState = filesaver.DONE;
-                };
-                filesaver.readyState = filesaver.WRITING;
-              }), fs_error);
-            }), fs_error);
-          };
-          dir.getFile(name, {create: false}, abortable(function(file) {
-            // delete file if it already exists
-            file.remove();
-            save();
-          }), abortable(function(ex) {
-            if (ex.code === ex.NOT_FOUND_ERR) {
-              save();
-            } else {
-              fs_error();
-            }
-          }));
-        }), fs_error);
-      }), fs_error);
-    }
-    , FS_proto = FileSaver.prototype
-    , saveAs = function(blob, name, no_auto_bom) {
-      return new FileSaver(blob, name, no_auto_bom);
-    }
-  ;
-  // IE 10+ (native saveAs)
-  if (typeof navigator !== "undefined" && navigator.msSaveOrOpenBlob) {
-    return function(blob, name, no_auto_bom) {
-      if (!no_auto_bom) {
-        blob = auto_bom(blob);
-      }
-      return navigator.msSaveOrOpenBlob(blob, name || "download");
-    };
-  }
-
-  FS_proto.abort = function() {
-    var filesaver = this;
-    filesaver.readyState = filesaver.DONE;
-    dispatch(filesaver, "abort");
-  };
-  FS_proto.readyState = FS_proto.INIT = 0;
-  FS_proto.WRITING = 1;
-  FS_proto.DONE = 2;
-
-  FS_proto.error =
-  FS_proto.onwritestart =
-  FS_proto.onprogress =
-  FS_proto.onwrite =
-  FS_proto.onabort =
-  FS_proto.onerror =
-  FS_proto.onwriteend =
-    null;
-
-  return saveAs;
-}(
-     typeof self !== "undefined" && self
-  || typeof window !== "undefined" && window
-  || this.content
-));
-// `self` is undefined in Firefox for Android content script context
-// while `this` is nsIContentFrameMessageManager
-// with an attribute `content` that corresponds to the window
-
-if (typeof module !== "undefined" && module.exports) {
-  module.exports.saveAs = saveAs;
-} else if ((typeof define !== "undefined" && define !== null) && (define.amd != null)) {
-  define([], function() {
-    return saveAs;
-  });
-}
-},{}],138:[function(require,module,exports){
-/*! Color.js - v0.9.11 - 2013-08-09
-* https://github.com/Automattic/Color.js
-* Copyright (c) 2013 Matt Wiebe; Licensed GPLv2 */
-(function(global, undef) {
-
-	var Color = function( color, type ) {
-		if ( ! ( this instanceof Color ) )
-			return new Color( color, type );
-
-		return this._init( color, type );
-	};
-
-	Color.fn = Color.prototype = {
-		_color: 0,
-		_alpha: 1,
-		error: false,
-		// for preserving hue/sat in fromHsl().toHsl() flows
-		_hsl: { h: 0, s: 0, l: 0 },
-		// for preserving hue/sat in fromHsv().toHsv() flows
-		_hsv: { h: 0, s: 0, v: 0 },
-		// for setting hsl or hsv space - needed for .h() & .s() functions to function properly
-		_hSpace: 'hsl',
-		_init: function( color ) {
-			var func = 'noop';
-			switch ( typeof color ) {
-					case 'object':
-						// alpha?
-						if ( color.a !== undef )
-							this.a( color.a );
-						func = ( color.r !== undef ) ? 'fromRgb' :
-							( color.l !== undef ) ? 'fromHsl' :
-							( color.v !== undef ) ? 'fromHsv' : func;
-						return this[func]( color );
-					case 'string':
-						return this.fromCSS( color );
-					case 'number':
-						return this.fromInt( parseInt( color, 10 ) );
-			}
-			return this;
-		},
-
-		_error: function() {
-			this.error = true;
-			return this;
-		},
-
-		clone: function() {
-			var newColor = new Color( this.toInt() ),
-				copy = ['_alpha', '_hSpace', '_hsl', '_hsv', 'error'];
-			for ( var i = copy.length - 1; i >= 0; i-- ) {
-				newColor[ copy[i] ] = this[ copy[i] ];
-			}
-			return newColor;
-		},
-
-		setHSpace: function( space ) {
-			this._hSpace = ( space === 'hsv' ) ? space : 'hsl';
-			return this;
-		},
-
-		noop: function() {
-			return this;
-		},
-
-		fromCSS: function( color ) {
-			var list,
-				leadingRE = /^(rgb|hs(l|v))a?\(/;
-			this.error = false;
-
-			// whitespace and semicolon trim
-			color = color.replace(/^\s+/, '').replace(/\s+$/, '').replace(/;$/, '');
-
-			if ( color.match(leadingRE) && color.match(/\)$/) ) {
-				list = color.replace(/(\s|%)/g, '').replace(leadingRE, '').replace(/,?\);?$/, '').split(',');
-
-				if ( list.length < 3 )
-					return this._error();
-
-				if ( list.length === 4 ) {
-					this.a( parseFloat( list.pop() ) );
-					// error state has been set to true in .a() if we passed NaN
-					if ( this.error )
-						return this;
-				}
-
-				for (var i = list.length - 1; i >= 0; i--) {
-					list[i] = parseInt(list[i], 10);
-					if ( isNaN( list[i] ) )
-						return this._error();
-				}
-
-				if ( color.match(/^rgb/) ) {
-					return this.fromRgb( {
-						r: list[0],
-						g: list[1],
-						b: list[2]
-					} );
-				} else if ( color.match(/^hsv/) ) {
-					return this.fromHsv( {
-						h: list[0],
-						s: list[1],
-						v: list[2]
-					} );
-				} else {
-					return this.fromHsl( {
-						h: list[0],
-						s: list[1],
-						l: list[2]
-					} );
-				}
-			} else {
-				// must be hex amirite?
-				return this.fromHex( color );
-			}
-		},
-
-		fromRgb: function( rgb, preserve ) {
-			if ( typeof rgb !== 'object' || rgb.r === undef || rgb.g === undef || rgb.b === undef )
-				return this._error();
-
-			this.error = false;
-			return this.fromInt( parseInt( ( rgb.r << 16 ) + ( rgb.g << 8 ) + rgb.b, 10 ), preserve );
-		},
-
-		fromHex: function( color ) {
-			color = color.replace(/^#/, '').replace(/^0x/, '');
-			if ( color.length === 3 ) {
-				color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
-			}
-
-			// rough error checking - this is where things go squirrely the most
-			this.error = ! /^[0-9A-F]{6}$/i.test( color );
-			return this.fromInt( parseInt( color, 16 ) );
-		},
-
-		fromHsl: function( hsl ) {
-			var r, g, b, q, p, h, s, l;
-
-			if ( typeof hsl !== 'object' || hsl.h === undef || hsl.s === undef || hsl.l === undef )
-				return this._error();
-
-			this._hsl = hsl; // store it
-			this._hSpace = 'hsl'; // implicit
-			h = hsl.h / 360; s = hsl.s / 100; l = hsl.l / 100;
-			if ( s === 0 ) {
-				r = g = b = l; // achromatic
-			}
-			else {
-				q = l < 0.5 ? l * ( 1 + s ) : l + s - l * s;
-				p = 2 * l - q;
-				r = this.hue2rgb( p, q, h + 1/3 );
-				g = this.hue2rgb( p, q, h );
-				b = this.hue2rgb( p, q, h - 1/3 );
-			}
-			return this.fromRgb( {
-				r: r * 255,
-				g: g * 255,
-				b: b * 255
-			}, true ); // true preserves hue/sat
-		},
-
-		fromHsv: function( hsv ) {
-			var h, s, v, r, g, b, i, f, p, q, t;
-			if ( typeof hsv !== 'object' || hsv.h === undef || hsv.s === undef || hsv.v === undef )
-				return this._error();
-
-			this._hsv = hsv; // store it
-			this._hSpace = 'hsv'; // implicit
-
-			h = hsv.h / 360; s = hsv.s / 100; v = hsv.v / 100;
-			i = Math.floor( h * 6 );
-			f = h * 6 - i;
-			p = v * ( 1 - s );
-			q = v * ( 1 - f * s );
-			t = v * ( 1 - ( 1 - f ) * s );
-
-			switch( i % 6 ) {
-				case 0:
-					r = v; g = t; b = p;
-					break;
-				case 1:
-					r = q; g = v; b = p;
-					break;
-				case 2:
-					r = p; g = v; b = t;
-					break;
-				case 3:
-					r = p; g = q; b = v;
-					break;
-				case 4:
-					r = t; g = p; b = v;
-					break;
-				case 5:
-					r = v; g = p; b = q;
-					break;
-			}
-
-			return this.fromRgb( {
-				r: r * 255,
-				g: g * 255,
-				b: b * 255
-			}, true ); // true preserves hue/sat
-
-		},
-		// everything comes down to fromInt
-		fromInt: function( color, preserve ) {
-			this._color = parseInt( color, 10 );
-
-			if ( isNaN( this._color ) )
-				this._color = 0;
-
-			// let's coerce things
-			if ( this._color > 16777215 )
-				this._color = 16777215;
-			else if ( this._color < 0 )
-				this._color = 0;
-
-			// let's not do weird things
-			if ( preserve === undef ) {
-				this._hsv.h = this._hsv.s = this._hsl.h = this._hsl.s = 0;
-			}
-			// EVENT GOES HERE
-			return this;
-		},
-
-		hue2rgb: function( p, q, t ) {
-			if ( t < 0 ) {
-				t += 1;
-			}
-			if ( t > 1 ) {
-				t -= 1;
-			}
-			if ( t < 1/6 ) {
-				return p + ( q - p ) * 6 * t;
-			}
-			if ( t < 1/2 ) {
-				return q;
-			}
-			if ( t < 2/3 ) {
-				return p + ( q - p ) * ( 2/3 - t ) * 6;
-			}
-			return p;
-		},
-
-		toString: function() {
-			var hex = parseInt( this._color, 10 ).toString( 16 );
-			if ( this.error )
-				return '';
-			// maybe left pad it
-			if ( hex.length < 6 ) {
-				for (var i = 6 - hex.length - 1; i >= 0; i--) {
-					hex = '0' + hex;
-				}
-			}
-			return '#' + hex;
-		},
-
-		toCSS: function( type, alpha ) {
-			type = type || 'hex';
-			alpha = parseFloat( alpha || this._alpha );
-			switch ( type ) {
-				case 'rgb':
-				case 'rgba':
-					var rgb = this.toRgb();
-					if ( alpha < 1 ) {
-						return "rgba( " + rgb.r + ", " + rgb.g + ", " + rgb.b + ", " + alpha + " )";
-					}
-					else {
-						return "rgb( " + rgb.r + ", " + rgb.g + ", " + rgb.b + " )";
-					}
-					break;
-				case 'hsl':
-				case 'hsla':
-					var hsl = this.toHsl();
-					if ( alpha < 1 ) {
-						return "hsla( " + hsl.h + ", " + hsl.s + "%, " + hsl.l + "%, " + alpha + " )";
-					}
-					else {
-						return "hsl( " + hsl.h + ", " + hsl.s + "%, " + hsl.l + "% )";
-					}
-					break;
-				default:
-					return this.toString();
-			}
-		},
-
-		toRgb: function() {
-			return {
-				r: 255 & ( this._color >> 16 ),
-				g: 255 & ( this._color >> 8 ),
-				b: 255 & ( this._color )
-			};
-		},
-
-		toHsl: function() {
-			var rgb = this.toRgb();
-			var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
-			var max = Math.max( r, g, b ), min = Math.min( r, g, b );
-			var h, s, l = ( max + min ) / 2;
-
-			if ( max === min ) {
-				h = s = 0; // achromatic
-			} else {
-				var d = max - min;
-				s = l > 0.5 ? d / ( 2 - max - min ) : d / ( max + min );
-				switch ( max ) {
-					case r: h = ( g - b ) / d + ( g < b ? 6 : 0 );
-						break;
-					case g: h = ( b - r ) / d + 2;
-						break;
-					case b: h = ( r - g ) / d + 4;
-						break;
-				}
-				h /= 6;
-			}
-
-			// maintain hue & sat if we've been manipulating things in the HSL space.
-			h = Math.round( h * 360 );
-			if ( h === 0 && this._hsl.h !== h ) {
-				h = this._hsl.h;
-			}
-			s = Math.round( s * 100 );
-			if ( s === 0 && this._hsl.s ) {
-				s = this._hsl.s;
-			}
-
-			return {
-				h: h,
-				s: s,
-				l: Math.round( l * 100 )
-			};
-
-		},
-
-		toHsv: function() {
-			var rgb = this.toRgb();
-			var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
-			var max = Math.max( r, g, b ), min = Math.min( r, g, b );
-			var h, s, v = max;
-			var d = max - min;
-			s = max === 0 ? 0 : d / max;
-
-			if ( max === min ) {
-				h = s = 0; // achromatic
-			} else {
-				switch( max ){
-					case r:
-						h = ( g - b ) / d + ( g < b ? 6 : 0 );
-						break;
-					case g:
-						h = ( b - r ) / d + 2;
-						break;
-					case b:
-						h = ( r - g ) / d + 4;
-						break;
-				}
-				h /= 6;
-			}
-
-			// maintain hue & sat if we've been manipulating things in the HSV space.
-			h = Math.round( h * 360 );
-			if ( h === 0 && this._hsv.h !== h ) {
-				h = this._hsv.h;
-			}
-			s = Math.round( s * 100 );
-			if ( s === 0 && this._hsv.s ) {
-				s = this._hsv.s;
-			}
-
-			return {
-				h: h,
-				s: s,
-				v: Math.round( v * 100 )
-			};
-		},
-
-		toInt: function() {
-			return this._color;
-		},
-
-		toIEOctoHex: function() {
-			// AARRBBGG
-			var hex = this.toString();
-			var AA = parseInt( 255 * this._alpha, 10 ).toString(16);
-			if ( AA.length === 1 ) {
-				AA = '0' + AA;
-			}
-			return '#' + AA + hex.replace(/^#/, '' );
-		},
-
-		toLuminosity: function() {
-			var rgb = this.toRgb();
-			return 0.2126 * Math.pow( rgb.r / 255, 2.2 ) + 0.7152 * Math.pow( rgb.g / 255, 2.2 ) + 0.0722 * Math.pow( rgb.b / 255, 2.2);
-		},
-
-		getDistanceLuminosityFrom: function( color ) {
-			if ( ! ( color instanceof Color ) ) {
-				throw 'getDistanceLuminosityFrom requires a Color object';
-			}
-			var lum1 = this.toLuminosity();
-			var lum2 = color.toLuminosity();
-			if ( lum1 > lum2 ) {
-				return ( lum1 + 0.05 ) / ( lum2 + 0.05 );
-			}
-			else {
-				return ( lum2 + 0.05 ) / ( lum1 + 0.05 );
-			}
-		},
-
-		getMaxContrastColor: function() {
-			var lum = this.toLuminosity();
-			var hex = ( lum >= 0.5 ) ? '000000' : 'ffffff';
-			return new Color( hex );
-		},
-
-		getReadableContrastingColor: function( bgColor, minContrast ) {
-			if ( ! bgColor instanceof Color ) {
-				return this;
-			}
-
-			// you shouldn't use less than 5, but you might want to.
-			var targetContrast = ( minContrast === undef ) ? 5 : minContrast;
-			// working things
-			var contrast = bgColor.getDistanceLuminosityFrom( this );
-			var maxContrastColor = bgColor.getMaxContrastColor();
-			var maxContrast = maxContrastColor.getDistanceLuminosityFrom( bgColor );
-
-			// if current max contrast is less than the target contrast, we had wishful thinking.
-			// still, go max
-			if ( maxContrast <= targetContrast ) {
-				return maxContrastColor;
-			}
-			// or, we might already have sufficient contrast
-			else if ( contrast >= targetContrast ) {
-				return this;
-			}
-
-			var incr = ( 0 === maxContrastColor.toInt() ) ? -1 : 1;
-			while ( contrast < targetContrast ) {
-				this.l( incr, true ); // 2nd arg turns this into an incrementer
-				contrast = this.getDistanceLuminosityFrom( bgColor );
-				// infininite loop prevention: you never know.
-				if ( this._color === 0 || this._color === 16777215 ) {
-					break;
-				}
-			}
-
-			return this;
-
-		},
-
-		a: function( val ) {
-			if ( val === undef )
-				return this._alpha;
-
-			var a = parseFloat( val );
-
-			if ( isNaN( a ) )
-				return this._error();
-
-			this._alpha = a;
-			return this;
-		},
-
-		// TRANSFORMS
-
-		darken: function( amount ) {
-			amount = amount || 5;
-			return this.l( - amount, true );
-		},
-
-		lighten: function( amount ) {
-			amount = amount || 5;
-			return this.l( amount, true );
-		},
-
-		saturate: function( amount ) {
-			amount = amount || 15;
-			return this.s( amount, true );
-		},
-
-		desaturate: function( amount ) {
-			amount = amount || 15;
-			return this.s( - amount, true );
-		},
-
-		toGrayscale: function() {
-			return this.setHSpace('hsl').s( 0 );
-		},
-
-		getComplement: function() {
-			return this.h( 180, true );
-		},
-
-		getSplitComplement: function( step ) {
-			step = step || 1;
-			var incr = 180 + ( step * 30 );
-			return this.h( incr, true );
-		},
-
-		getAnalog: function( step ) {
-			step = step || 1;
-			var incr = step * 30;
-			return this.h( incr, true );
-		},
-
-		getTetrad: function( step ) {
-			step = step || 1;
-			var incr = step * 60;
-			return this.h( incr, true );
-		},
-
-		getTriad: function( step ) {
-			step = step || 1;
-			var incr = step * 120;
-			return this.h( incr, true );
-		},
-
-		_partial: function( key ) {
-			var prop = shortProps[key];
-			return function( val, incr ) {
-				var color = this._spaceFunc('to', prop.space);
-
-				// GETTER
-				if ( val === undef )
-					return color[key];
-
-				// INCREMENT
-				if ( incr === true )
-					val = color[key] + val;
-
-				// MOD & RANGE
-				if ( prop.mod )
-					val = val % prop.mod;
-				if ( prop.range )
-					val = ( val < prop.range[0] ) ? prop.range[0] : ( val > prop.range[1] ) ? prop.range[1] : val;
-
-				// NEW VALUE
-				color[key] = val;
-
-				return this._spaceFunc('from', prop.space, color);
-			};
-		},
-
-		_spaceFunc: function( dir, s, val ) {
-			var space = s || this._hSpace,
-				funcName = dir + space.charAt(0).toUpperCase() + space.substr(1);
-			return this[funcName](val);
-		}
-	};
-
-	var shortProps = {
-		h: {
-			mod: 360
-		},
-		s: {
-			range: [0,100]
-		},
-		l: {
-			space: 'hsl',
-			range: [0,100]
-		},
-		v: {
-			space: 'hsv',
-			range: [0,100]
-		},
-		r: {
-			space: 'rgb',
-			range: [0,255]
-		},
-		g: {
-			space: 'rgb',
-			range: [0,255]
-		},
-		b: {
-			space: 'rgb',
-			range: [0,255]
-		}
-	};
-
-	for ( var key in shortProps ) {
-		if ( shortProps.hasOwnProperty( key ) )
-			Color.fn[key] = Color.fn._partial(key);
-	}
-
-	// play nicely with Node + browser
-	if ( typeof exports === 'object' )
-		module.exports = Color;
-	else
-		global.Color = Color;
-
-}(this));
-},{}],139:[function(require,module,exports){
+},{}],113:[function(require,module,exports){
 /*
  * HTML5 Sortable jQuery Plugin
  * https://github.com/voidberg/html5sortable
@@ -10112,7 +8722,7 @@ if (typeof module !== "undefined" && module.exports) {
     });
   };
 })(jQuery);
-},{}],140:[function(require,module,exports){
+},{}],114:[function(require,module,exports){
 // Generated by CoffeeScript 1.9.2
 
 /*
@@ -10342,7 +8952,77 @@ Copyright 2015 Kevin Sylvestre
   };
 
 }).call(this);
-},{}],141:[function(require,module,exports){
+},{}],115:[function(require,module,exports){
+//https://github.com/customd/jquery-visible
+(function($){
+
+    /**
+     * Copyright 2012, Digital Fusion
+     * Licensed under the MIT license.
+     * http://teamdf.com/jquery-plugins/license/
+     *
+     * @author Sam Sehnert
+     * @desc A small plugin that checks whether elements are within
+     *       the user visible viewport of a web browser.
+     *       only accounts for vertical position, not horizontal.
+     */
+    var $w = $(window);
+    $.fn.visible = function(partial,hidden,direction){
+
+        if (this.length < 1)
+            return;
+
+        var $t        = this.length > 1 ? this.eq(0) : this,
+            t         = $t.get(0),
+            vpWidth   = $w.width(),
+            vpHeight  = $w.height(),
+            direction = (direction) ? direction : 'both',
+            clientSize = hidden === true ? t.offsetWidth * t.offsetHeight : true;
+
+        if (typeof t.getBoundingClientRect === 'function'){
+
+            // Use this native browser method, if available.
+            var rec = t.getBoundingClientRect(),
+                tViz = rec.top    >= 0 && rec.top    <  vpHeight,
+                bViz = rec.bottom >  0 && rec.bottom <= vpHeight,
+                lViz = rec.left   >= 0 && rec.left   <  vpWidth,
+                rViz = rec.right  >  0 && rec.right  <= vpWidth,
+                vVisible   = partial ? tViz || bViz : tViz && bViz,
+                hVisible   = partial ? lViz || rViz : lViz && rViz;
+
+            if(direction === 'both')
+                return clientSize && vVisible && hVisible;
+            else if(direction === 'vertical')
+                return clientSize && vVisible;
+            else if(direction === 'horizontal')
+                return clientSize && hVisible;
+        } else {
+
+            var viewTop         = $w.scrollTop(),
+                viewBottom      = viewTop + vpHeight,
+                viewLeft        = $w.scrollLeft(),
+                viewRight       = viewLeft + vpWidth,
+                offset          = $t.offset(),
+                _top            = offset.top,
+                _bottom         = _top + $t.height(),
+                _left           = offset.left,
+                _right          = _left + $t.width(),
+                compareTop      = partial === true ? _bottom : _top,
+                compareBottom   = partial === true ? _top : _bottom,
+                compareLeft     = partial === true ? _right : _left,
+                compareRight    = partial === true ? _left : _right;
+
+            if(direction === 'both')
+                return !!clientSize && ((compareBottom <= viewBottom) && (compareTop >= viewTop)) && ((compareRight <= viewRight) && (compareLeft >= viewLeft));
+            else if(direction === 'vertical')
+                return !!clientSize && ((compareBottom <= viewBottom) && (compareTop >= viewTop));
+            else if(direction === 'horizontal')
+                return !!clientSize && ((compareRight <= viewRight) && (compareLeft >= viewLeft));
+        }
+    };
+
+})(jQuery);
+},{}],116:[function(require,module,exports){
 //https://github.com/kmewhort/pointer_events_polyfill
 /*
  * Pointer Events Polyfill: Adds support for the style attribute "pointer-events: none" to browsers without this feature (namely, IE).
@@ -10412,7 +9092,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
         return true;
     });
 };
-},{}],142:[function(require,module,exports){
+},{}],117:[function(require,module,exports){
 // Modified to fix transparent pixels being calculated as black (https://github.com/briangonzalez/rgbaster.js/issues/8)
 ;(function(window, undefined){
 
@@ -10536,4778 +9216,9 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
   window.RGBaster = window.RGBaster || RGBaster;
 
 })(window);
-},{}],143:[function(require,module,exports){
-/*!
- * string_score.js: String Scoring Algorithm 0.1.22
- *
- * http://joshaven.com/string_score
- * https://github.com/joshaven/string_score
- *
- * Copyright (C) 2009-2014 Joshaven Potter <yourtech@gmail.com>
- * Special thanks to all of the contributors listed here https://github.com/joshaven/string_score
- * MIT License: http://opensource.org/licenses/MIT
- *
- * Date: Tue Mar 1 2011
- * Updated: Tue Mar 10 2015
-*/
-
-/*jslint nomen:true, white:true, browser:true,devel:true */
-
-/**
- * Scores a string against another string.
- *    'Hello World'.score('he');         //=> 0.5931818181818181
- *    'Hello World'.score('Hello');    //=> 0.7318181818181818
- */
-String.prototype.score = function (word, fuzziness) {
-  'use strict';
-
-  // If the string is equal to the word, perfect match.
-  if (this === word) { return 1; }
-
-  //if it's not a perfect match and is empty return 0
-  if (word === "") { return 0; }
-
-  var runningScore = 0,
-      charScore,
-      finalScore,
-      string = this,
-      lString = string.toLowerCase(),
-      strLength = string.length,
-      lWord = word.toLowerCase(),
-      wordLength = word.length,
-      idxOf,
-      startAt = 0,
-      fuzzies = 1,
-      fuzzyFactor,
-      i;
-
-  // Cache fuzzyFactor for speed increase
-  if (fuzziness) { fuzzyFactor = 1 - fuzziness; }
-
-  // Walk through word and add up scores.
-  // Code duplication occurs to prevent checking fuzziness inside for loop
-  if (fuzziness) {
-    for (i = 0; i < wordLength; i+=1) {
-
-      // Find next first case-insensitive match of a character.
-      idxOf = lString.indexOf(lWord[i], startAt);
-
-      if (idxOf === -1) {
-        fuzzies += fuzzyFactor;
-      } else {
-        if (startAt === idxOf) {
-          // Consecutive letter & start-of-string Bonus
-          charScore = 0.7;
-        } else {
-          charScore = 0.1;
-
-          // Acronym Bonus
-          // Weighing Logic: Typing the first character of an acronym is as if you
-          // preceded it with two perfect character matches.
-          if (string[idxOf - 1] === ' ') { charScore += 0.8; }
-        }
-
-        // Same case bonus.
-        if (string[idxOf] === word[i]) { charScore += 0.1; }
-
-        // Update scores and startAt position for next round of indexOf
-        runningScore += charScore;
-        startAt = idxOf + 1;
-      }
-    }
-  } else {
-    for (i = 0; i < wordLength; i+=1) {
-      idxOf = lString.indexOf(lWord[i], startAt);
-      if (-1 === idxOf) { return 0; }
-
-      if (startAt === idxOf) {
-        charScore = 0.7;
-      } else {
-        charScore = 0.1;
-        if (string[idxOf - 1] === ' ') { charScore += 0.8; }
-      }
-      if (string[idxOf] === word[i]) { charScore += 0.1; }
-      runningScore += charScore;
-      startAt = idxOf + 1;
-    }
-  }
-
-  // Reduce penalty for longer strings.
-  finalScore = 0.5 * (runningScore / strLength    + runningScore / wordLength) / fuzzies;
-
-  if ((lWord[0] === lString[0]) && (finalScore < 0.85)) {
-    finalScore += 0.15;
-  }
-
-  return finalScore;
-};
-},{}],144:[function(require,module,exports){
-// Backbone.BabySitter
-// -------------------
-// v0.1.10
-//
-// Copyright (c)2015 Derick Bailey, Muted Solutions, LLC.
-// Distributed under MIT license
-//
-// http://github.com/marionettejs/backbone.babysitter
-
-(function(root, factory) {
-
-  if (typeof define === 'function' && define.amd) {
-    define(['backbone', 'underscore'], function(Backbone, _) {
-      return factory(Backbone, _);
-    });
-  } else if (typeof exports !== 'undefined') {
-    var Backbone = require('backbone');
-    var _ = require('underscore');
-    module.exports = factory(Backbone, _);
-  } else {
-    factory(root.Backbone, root._);
-  }
-
-}(this, function(Backbone, _) {
-  'use strict';
-
-  var previousChildViewContainer = Backbone.ChildViewContainer;
-
-  // BabySitter.ChildViewContainer
-  // -----------------------------
-  //
-  // Provide a container to store, retrieve and
-  // shut down child views.
-  
-  Backbone.ChildViewContainer = (function (Backbone, _) {
-  
-    // Container Constructor
-    // ---------------------
-  
-    var Container = function(views){
-      this._views = {};
-      this._indexByModel = {};
-      this._indexByCustom = {};
-      this._updateLength();
-  
-      _.each(views, this.add, this);
-    };
-  
-    // Container Methods
-    // -----------------
-  
-    _.extend(Container.prototype, {
-  
-      // Add a view to this container. Stores the view
-      // by `cid` and makes it searchable by the model
-      // cid (and model itself). Optionally specify
-      // a custom key to store an retrieve the view.
-      add: function(view, customIndex){
-        var viewCid = view.cid;
-  
-        // store the view
-        this._views[viewCid] = view;
-  
-        // index it by model
-        if (view.model){
-          this._indexByModel[view.model.cid] = viewCid;
-        }
-  
-        // index by custom
-        if (customIndex){
-          this._indexByCustom[customIndex] = viewCid;
-        }
-  
-        this._updateLength();
-        return this;
-      },
-  
-      // Find a view by the model that was attached to
-      // it. Uses the model's `cid` to find it.
-      findByModel: function(model){
-        return this.findByModelCid(model.cid);
-      },
-  
-      // Find a view by the `cid` of the model that was attached to
-      // it. Uses the model's `cid` to find the view `cid` and
-      // retrieve the view using it.
-      findByModelCid: function(modelCid){
-        var viewCid = this._indexByModel[modelCid];
-        return this.findByCid(viewCid);
-      },
-  
-      // Find a view by a custom indexer.
-      findByCustom: function(index){
-        var viewCid = this._indexByCustom[index];
-        return this.findByCid(viewCid);
-      },
-  
-      // Find by index. This is not guaranteed to be a
-      // stable index.
-      findByIndex: function(index){
-        return _.values(this._views)[index];
-      },
-  
-      // retrieve a view by its `cid` directly
-      findByCid: function(cid){
-        return this._views[cid];
-      },
-  
-      // Remove a view
-      remove: function(view){
-        var viewCid = view.cid;
-  
-        // delete model index
-        if (view.model){
-          delete this._indexByModel[view.model.cid];
-        }
-  
-        // delete custom index
-        _.any(this._indexByCustom, function(cid, key) {
-          if (cid === viewCid) {
-            delete this._indexByCustom[key];
-            return true;
-          }
-        }, this);
-  
-        // remove the view from the container
-        delete this._views[viewCid];
-  
-        // update the length
-        this._updateLength();
-        return this;
-      },
-  
-      // Call a method on every view in the container,
-      // passing parameters to the call method one at a
-      // time, like `function.call`.
-      call: function(method){
-        this.apply(method, _.tail(arguments));
-      },
-  
-      // Apply a method on every view in the container,
-      // passing parameters to the call method one at a
-      // time, like `function.apply`.
-      apply: function(method, args){
-        _.each(this._views, function(view){
-          if (_.isFunction(view[method])){
-            view[method].apply(view, args || []);
-          }
-        });
-      },
-  
-      // Update the `.length` attribute on this container
-      _updateLength: function(){
-        this.length = _.size(this._views);
-      }
-    });
-  
-    // Borrowing this code from Backbone.Collection:
-    // http://backbonejs.org/docs/backbone.html#section-106
-    //
-    // Mix in methods from Underscore, for iteration, and other
-    // collection related features.
-    var methods = ['forEach', 'each', 'map', 'find', 'detect', 'filter',
-      'select', 'reject', 'every', 'all', 'some', 'any', 'include',
-      'contains', 'invoke', 'toArray', 'first', 'initial', 'rest',
-      'last', 'without', 'isEmpty', 'pluck', 'reduce'];
-  
-    _.each(methods, function(method) {
-      Container.prototype[method] = function() {
-        var views = _.values(this._views);
-        var args = [views].concat(_.toArray(arguments));
-        return _[method].apply(_, args);
-      };
-    });
-  
-    // return the public API
-    return Container;
-  })(Backbone, _);
-  
-
-  Backbone.ChildViewContainer.VERSION = '0.1.10';
-
-  Backbone.ChildViewContainer.noConflict = function () {
-    Backbone.ChildViewContainer = previousChildViewContainer;
-    return this;
-  };
-
-  return Backbone.ChildViewContainer;
-
-}));
-
-},{"backbone":"backbone","underscore":"underscore"}],145:[function(require,module,exports){
-// MarionetteJS (Backbone.Marionette)
-// ----------------------------------
-// v2.4.2
-//
-// Copyright (c)2015 Derick Bailey, Muted Solutions, LLC.
-// Distributed under MIT license
-//
-// http://marionettejs.com
-
-(function(root, factory) {
-
-  if (typeof define === 'function' && define.amd) {
-    define(['backbone', 'underscore', 'backbone.wreqr', 'backbone.babysitter'], function(Backbone, _) {
-      return (root.Marionette = root.Mn = factory(root, Backbone, _));
-    });
-  } else if (typeof exports !== 'undefined') {
-    var Backbone = require('backbone');
-    var _ = require('underscore');
-    var Wreqr = require('backbone.wreqr');
-    var BabySitter = require('backbone.babysitter');
-    module.exports = factory(root, Backbone, _);
-  } else {
-    root.Marionette = root.Mn = factory(root, root.Backbone, root._);
-  }
-
-}(this, function(root, Backbone, _) {
-  'use strict';
-
-  var previousMarionette = root.Marionette;
-  var previousMn = root.Mn;
-
-  var Marionette = Backbone.Marionette = {};
-
-  Marionette.VERSION = '2.4.2';
-
-  Marionette.noConflict = function() {
-    root.Marionette = previousMarionette;
-    root.Mn = previousMn;
-    return this;
-  };
-
-  // Get the Deferred creator for later use
-  Marionette.Deferred = Backbone.$.Deferred;
-
-  Marionette.FEATURES = {
-  };
-  
-  Marionette.isEnabled = function(name) {
-    return !!Marionette.FEATURES[name];
-  };
-  
-  /* jshint unused: false *//* global console */
-  
-  // Helpers
-  // -------
-  
-  // Marionette.extend
-  // -----------------
-  
-  // Borrow the Backbone `extend` method so we can use it as needed
-  Marionette.extend = Backbone.Model.extend;
-  
-  // Marionette.isNodeAttached
-  // -------------------------
-  
-  // Determine if `el` is a child of the document
-  Marionette.isNodeAttached = function(el) {
-    return Backbone.$.contains(document.documentElement, el);
-  };
-  
-  // Merge `keys` from `options` onto `this`
-  Marionette.mergeOptions = function(options, keys) {
-    if (!options) { return; }
-    _.extend(this, _.pick(options, keys));
-  };
-  
-  // Marionette.getOption
-  // --------------------
-  
-  // Retrieve an object, function or other value from a target
-  // object or its `options`, with `options` taking precedence.
-  Marionette.getOption = function(target, optionName) {
-    if (!target || !optionName) { return; }
-    if (target.options && (target.options[optionName] !== undefined)) {
-      return target.options[optionName];
-    } else {
-      return target[optionName];
-    }
-  };
-  
-  // Proxy `Marionette.getOption`
-  Marionette.proxyGetOption = function(optionName) {
-    return Marionette.getOption(this, optionName);
-  };
-  
-  // Similar to `_.result`, this is a simple helper
-  // If a function is provided we call it with context
-  // otherwise just return the value. If the value is
-  // undefined return a default value
-  Marionette._getValue = function(value, context, params) {
-    if (_.isFunction(value)) {
-      value = params ? value.apply(context, params) : value.call(context);
-    }
-    return value;
-  };
-  
-  // Marionette.normalizeMethods
-  // ----------------------
-  
-  // Pass in a mapping of events => functions or function names
-  // and return a mapping of events => functions
-  Marionette.normalizeMethods = function(hash) {
-    return _.reduce(hash, function(normalizedHash, method, name) {
-      if (!_.isFunction(method)) {
-        method = this[method];
-      }
-      if (method) {
-        normalizedHash[name] = method;
-      }
-      return normalizedHash;
-    }, {}, this);
-  };
-  
-  // utility method for parsing @ui. syntax strings
-  // into associated selector
-  Marionette.normalizeUIString = function(uiString, ui) {
-    return uiString.replace(/@ui\.[a-zA-Z_$0-9]*/g, function(r) {
-      return ui[r.slice(4)];
-    });
-  };
-  
-  // allows for the use of the @ui. syntax within
-  // a given key for triggers and events
-  // swaps the @ui with the associated selector.
-  // Returns a new, non-mutated, parsed events hash.
-  Marionette.normalizeUIKeys = function(hash, ui) {
-    return _.reduce(hash, function(memo, val, key) {
-      var normalizedKey = Marionette.normalizeUIString(key, ui);
-      memo[normalizedKey] = val;
-      return memo;
-    }, {});
-  };
-  
-  // allows for the use of the @ui. syntax within
-  // a given value for regions
-  // swaps the @ui with the associated selector
-  Marionette.normalizeUIValues = function(hash, ui, properties) {
-    _.each(hash, function(val, key) {
-      if (_.isString(val)) {
-        hash[key] = Marionette.normalizeUIString(val, ui);
-      } else if (_.isObject(val) && _.isArray(properties)) {
-        _.extend(val, Marionette.normalizeUIValues(_.pick(val, properties), ui));
-        /* Value is an object, and we got an array of embedded property names to normalize. */
-        _.each(properties, function(property) {
-          var propertyVal = val[property];
-          if (_.isString(propertyVal)) {
-            val[property] = Marionette.normalizeUIString(propertyVal, ui);
-          }
-        });
-      }
-    });
-    return hash;
-  };
-  
-  // Mix in methods from Underscore, for iteration, and other
-  // collection related features.
-  // Borrowing this code from Backbone.Collection:
-  // http://backbonejs.org/docs/backbone.html#section-121
-  Marionette.actAsCollection = function(object, listProperty) {
-    var methods = ['forEach', 'each', 'map', 'find', 'detect', 'filter',
-      'select', 'reject', 'every', 'all', 'some', 'any', 'include',
-      'contains', 'invoke', 'toArray', 'first', 'initial', 'rest',
-      'last', 'without', 'isEmpty', 'pluck'];
-  
-    _.each(methods, function(method) {
-      object[method] = function() {
-        var list = _.values(_.result(this, listProperty));
-        var args = [list].concat(_.toArray(arguments));
-        return _[method].apply(_, args);
-      };
-    });
-  };
-  
-  var deprecate = Marionette.deprecate = function(message, test) {
-    if (_.isObject(message)) {
-      message = (
-        message.prev + ' is going to be removed in the future. ' +
-        'Please use ' + message.next + ' instead.' +
-        (message.url ? ' See: ' + message.url : '')
-      );
-    }
-  
-    if ((test === undefined || !test) && !deprecate._cache[message]) {
-      deprecate._warn('Deprecation warning: ' + message);
-      deprecate._cache[message] = true;
-    }
-  };
-  
-  deprecate._warn = typeof console !== 'undefined' && (console.warn || console.log) || function() {};
-  deprecate._cache = {};
-  
-  /* jshint maxstatements: 14, maxcomplexity: 7 */
-  
-  // Trigger Method
-  // --------------
-  
-  Marionette._triggerMethod = (function() {
-    // split the event name on the ":"
-    var splitter = /(^|:)(\w)/gi;
-  
-    // take the event section ("section1:section2:section3")
-    // and turn it in to uppercase name
-    function getEventName(match, prefix, eventName) {
-      return eventName.toUpperCase();
-    }
-  
-    return function(context, event, args) {
-      var noEventArg = arguments.length < 3;
-      if (noEventArg) {
-        args = event;
-        event = args[0];
-      }
-  
-      // get the method name from the event name
-      var methodName = 'on' + event.replace(splitter, getEventName);
-      var method = context[methodName];
-      var result;
-  
-      // call the onMethodName if it exists
-      if (_.isFunction(method)) {
-        // pass all args, except the event name
-        result = method.apply(context, noEventArg ? _.rest(args) : args);
-      }
-  
-      // trigger the event, if a trigger method exists
-      if (_.isFunction(context.trigger)) {
-        if (noEventArg + args.length > 1) {
-          context.trigger.apply(context, noEventArg ? args : [event].concat(_.drop(args, 0)));
-        } else {
-          context.trigger(event);
-        }
-      }
-  
-      return result;
-    };
-  })();
-  
-  // Trigger an event and/or a corresponding method name. Examples:
-  //
-  // `this.triggerMethod("foo")` will trigger the "foo" event and
-  // call the "onFoo" method.
-  //
-  // `this.triggerMethod("foo:bar")` will trigger the "foo:bar" event and
-  // call the "onFooBar" method.
-  Marionette.triggerMethod = function(event) {
-    return Marionette._triggerMethod(this, arguments);
-  };
-  
-  // triggerMethodOn invokes triggerMethod on a specific context
-  //
-  // e.g. `Marionette.triggerMethodOn(view, 'show')`
-  // will trigger a "show" event or invoke onShow the view.
-  Marionette.triggerMethodOn = function(context) {
-    var fnc = _.isFunction(context.triggerMethod) ?
-                  context.triggerMethod :
-                  Marionette.triggerMethod;
-  
-    return fnc.apply(context, _.rest(arguments));
-  };
-  
-  // DOM Refresh
-  // -----------
-  
-  // Monitor a view's state, and after it has been rendered and shown
-  // in the DOM, trigger a "dom:refresh" event every time it is
-  // re-rendered.
-  
-  Marionette.MonitorDOMRefresh = function(view) {
-  
-    // track when the view has been shown in the DOM,
-    // using a Marionette.Region (or by other means of triggering "show")
-    function handleShow() {
-      view._isShown = true;
-      triggerDOMRefresh();
-    }
-  
-    // track when the view has been rendered
-    function handleRender() {
-      view._isRendered = true;
-      triggerDOMRefresh();
-    }
-  
-    // Trigger the "dom:refresh" event and corresponding "onDomRefresh" method
-    function triggerDOMRefresh() {
-      if (view._isShown && view._isRendered && Marionette.isNodeAttached(view.el)) {
-        if (_.isFunction(view.triggerMethod)) {
-          view.triggerMethod('dom:refresh');
-        }
-      }
-    }
-  
-    view.on({
-      show: handleShow,
-      render: handleRender
-    });
-  };
-  
-  /* jshint maxparams: 5 */
-  
-  // Bind Entity Events & Unbind Entity Events
-  // -----------------------------------------
-  //
-  // These methods are used to bind/unbind a backbone "entity" (e.g. collection/model)
-  // to methods on a target object.
-  //
-  // The first parameter, `target`, must have the Backbone.Events module mixed in.
-  //
-  // The second parameter is the `entity` (Backbone.Model, Backbone.Collection or
-  // any object that has Backbone.Events mixed in) to bind the events from.
-  //
-  // The third parameter is a hash of { "event:name": "eventHandler" }
-  // configuration. Multiple handlers can be separated by a space. A
-  // function can be supplied instead of a string handler name.
-  
-  (function(Marionette) {
-    'use strict';
-  
-    // Bind the event to handlers specified as a string of
-    // handler names on the target object
-    function bindFromStrings(target, entity, evt, methods) {
-      var methodNames = methods.split(/\s+/);
-  
-      _.each(methodNames, function(methodName) {
-  
-        var method = target[methodName];
-        if (!method) {
-          throw new Marionette.Error('Method "' + methodName +
-            '" was configured as an event handler, but does not exist.');
-        }
-  
-        target.listenTo(entity, evt, method);
-      });
-    }
-  
-    // Bind the event to a supplied callback function
-    function bindToFunction(target, entity, evt, method) {
-      target.listenTo(entity, evt, method);
-    }
-  
-    // Bind the event to handlers specified as a string of
-    // handler names on the target object
-    function unbindFromStrings(target, entity, evt, methods) {
-      var methodNames = methods.split(/\s+/);
-  
-      _.each(methodNames, function(methodName) {
-        var method = target[methodName];
-        target.stopListening(entity, evt, method);
-      });
-    }
-  
-    // Bind the event to a supplied callback function
-    function unbindToFunction(target, entity, evt, method) {
-      target.stopListening(entity, evt, method);
-    }
-  
-    // generic looping function
-    function iterateEvents(target, entity, bindings, functionCallback, stringCallback) {
-      if (!entity || !bindings) { return; }
-  
-      // type-check bindings
-      if (!_.isObject(bindings)) {
-        throw new Marionette.Error({
-          message: 'Bindings must be an object or function.',
-          url: 'marionette.functions.html#marionettebindentityevents'
-        });
-      }
-  
-      // allow the bindings to be a function
-      bindings = Marionette._getValue(bindings, target);
-  
-      // iterate the bindings and bind them
-      _.each(bindings, function(methods, evt) {
-  
-        // allow for a function as the handler,
-        // or a list of event names as a string
-        if (_.isFunction(methods)) {
-          functionCallback(target, entity, evt, methods);
-        } else {
-          stringCallback(target, entity, evt, methods);
-        }
-  
-      });
-    }
-  
-    // Export Public API
-    Marionette.bindEntityEvents = function(target, entity, bindings) {
-      iterateEvents(target, entity, bindings, bindToFunction, bindFromStrings);
-    };
-  
-    Marionette.unbindEntityEvents = function(target, entity, bindings) {
-      iterateEvents(target, entity, bindings, unbindToFunction, unbindFromStrings);
-    };
-  
-    // Proxy `bindEntityEvents`
-    Marionette.proxyBindEntityEvents = function(entity, bindings) {
-      return Marionette.bindEntityEvents(this, entity, bindings);
-    };
-  
-    // Proxy `unbindEntityEvents`
-    Marionette.proxyUnbindEntityEvents = function(entity, bindings) {
-      return Marionette.unbindEntityEvents(this, entity, bindings);
-    };
-  })(Marionette);
-  
-
-  // Error
-  // -----
-  
-  var errorProps = ['description', 'fileName', 'lineNumber', 'name', 'message', 'number'];
-  
-  Marionette.Error = Marionette.extend.call(Error, {
-    urlRoot: 'http://marionettejs.com/docs/v' + Marionette.VERSION + '/',
-  
-    constructor: function(message, options) {
-      if (_.isObject(message)) {
-        options = message;
-        message = options.message;
-      } else if (!options) {
-        options = {};
-      }
-  
-      var error = Error.call(this, message);
-      _.extend(this, _.pick(error, errorProps), _.pick(options, errorProps));
-  
-      this.captureStackTrace();
-  
-      if (options.url) {
-        this.url = this.urlRoot + options.url;
-      }
-    },
-  
-    captureStackTrace: function() {
-      if (Error.captureStackTrace) {
-        Error.captureStackTrace(this, Marionette.Error);
-      }
-    },
-  
-    toString: function() {
-      return this.name + ': ' + this.message + (this.url ? ' See: ' + this.url : '');
-    }
-  });
-  
-  Marionette.Error.extend = Marionette.extend;
-  
-  // Callbacks
-  // ---------
-  
-  // A simple way of managing a collection of callbacks
-  // and executing them at a later point in time, using jQuery's
-  // `Deferred` object.
-  Marionette.Callbacks = function() {
-    this._deferred = Marionette.Deferred();
-    this._callbacks = [];
-  };
-  
-  _.extend(Marionette.Callbacks.prototype, {
-  
-    // Add a callback to be executed. Callbacks added here are
-    // guaranteed to execute, even if they are added after the
-    // `run` method is called.
-    add: function(callback, contextOverride) {
-      var promise = _.result(this._deferred, 'promise');
-  
-      this._callbacks.push({cb: callback, ctx: contextOverride});
-  
-      promise.then(function(args) {
-        if (contextOverride) { args.context = contextOverride; }
-        callback.call(args.context, args.options);
-      });
-    },
-  
-    // Run all registered callbacks with the context specified.
-    // Additional callbacks can be added after this has been run
-    // and they will still be executed.
-    run: function(options, context) {
-      this._deferred.resolve({
-        options: options,
-        context: context
-      });
-    },
-  
-    // Resets the list of callbacks to be run, allowing the same list
-    // to be run multiple times - whenever the `run` method is called.
-    reset: function() {
-      var callbacks = this._callbacks;
-      this._deferred = Marionette.Deferred();
-      this._callbacks = [];
-  
-      _.each(callbacks, function(cb) {
-        this.add(cb.cb, cb.ctx);
-      }, this);
-    }
-  });
-  
-  // Controller
-  // ----------
-  
-  // A multi-purpose object to use as a controller for
-  // modules and routers, and as a mediator for workflow
-  // and coordination of other objects, views, and more.
-  Marionette.Controller = function(options) {
-    this.options = options || {};
-  
-    if (_.isFunction(this.initialize)) {
-      this.initialize(this.options);
-    }
-  };
-  
-  Marionette.Controller.extend = Marionette.extend;
-  
-  // Controller Methods
-  // --------------
-  
-  // Ensure it can trigger events with Backbone.Events
-  _.extend(Marionette.Controller.prototype, Backbone.Events, {
-    destroy: function() {
-      Marionette._triggerMethod(this, 'before:destroy', arguments);
-      Marionette._triggerMethod(this, 'destroy', arguments);
-  
-      this.stopListening();
-      this.off();
-      return this;
-    },
-  
-    // import the `triggerMethod` to trigger events with corresponding
-    // methods if the method exists
-    triggerMethod: Marionette.triggerMethod,
-  
-    // A handy way to merge options onto the instance
-    mergeOptions: Marionette.mergeOptions,
-  
-    // Proxy `getOption` to enable getting options from this or this.options by name.
-    getOption: Marionette.proxyGetOption
-  
-  });
-  
-  // Object
-  // ------
-  
-  // A Base Class that other Classes should descend from.
-  // Object borrows many conventions and utilities from Backbone.
-  Marionette.Object = function(options) {
-    this.options = _.extend({}, _.result(this, 'options'), options);
-  
-    this.initialize.apply(this, arguments);
-  };
-  
-  Marionette.Object.extend = Marionette.extend;
-  
-  // Object Methods
-  // --------------
-  
-  // Ensure it can trigger events with Backbone.Events
-  _.extend(Marionette.Object.prototype, Backbone.Events, {
-  
-    //this is a noop method intended to be overridden by classes that extend from this base
-    initialize: function() {},
-  
-    destroy: function() {
-      this.triggerMethod('before:destroy');
-      this.triggerMethod('destroy');
-      this.stopListening();
-  
-      return this;
-    },
-  
-    // Import the `triggerMethod` to trigger events with corresponding
-    // methods if the method exists
-    triggerMethod: Marionette.triggerMethod,
-  
-    // A handy way to merge options onto the instance
-    mergeOptions: Marionette.mergeOptions,
-  
-    // Proxy `getOption` to enable getting options from this or this.options by name.
-    getOption: Marionette.proxyGetOption,
-  
-    // Proxy `bindEntityEvents` to enable binding view's events from another entity.
-    bindEntityEvents: Marionette.proxyBindEntityEvents,
-  
-    // Proxy `unbindEntityEvents` to enable unbinding view's events from another entity.
-    unbindEntityEvents: Marionette.proxyUnbindEntityEvents
-  });
-  
-  /* jshint maxcomplexity: 16, maxstatements: 45, maxlen: 120 */
-  
-  // Region
-  // ------
-  
-  // Manage the visual regions of your composite application. See
-  // http://lostechies.com/derickbailey/2011/12/12/composite-js-apps-regions-and-region-managers/
-  
-  Marionette.Region = Marionette.Object.extend({
-    constructor: function(options) {
-  
-      // set options temporarily so that we can get `el`.
-      // options will be overriden by Object.constructor
-      this.options = options || {};
-      this.el = this.getOption('el');
-  
-      // Handle when this.el is passed in as a $ wrapped element.
-      this.el = this.el instanceof Backbone.$ ? this.el[0] : this.el;
-  
-      if (!this.el) {
-        throw new Marionette.Error({
-          name: 'NoElError',
-          message: 'An "el" must be specified for a region.'
-        });
-      }
-  
-      this.$el = this.getEl(this.el);
-      Marionette.Object.call(this, options);
-    },
-  
-    // Displays a backbone view instance inside of the region.
-    // Handles calling the `render` method for you. Reads content
-    // directly from the `el` attribute. Also calls an optional
-    // `onShow` and `onDestroy` method on your view, just after showing
-    // or just before destroying the view, respectively.
-    // The `preventDestroy` option can be used to prevent a view from
-    // the old view being destroyed on show.
-    // The `forceShow` option can be used to force a view to be
-    // re-rendered if it's already shown in the region.
-    show: function(view, options) {
-      if (!this._ensureElement()) {
-        return;
-      }
-  
-      this._ensureViewIsIntact(view);
-  
-      var showOptions     = options || {};
-      var isDifferentView = view !== this.currentView;
-      var preventDestroy  = !!showOptions.preventDestroy;
-      var forceShow       = !!showOptions.forceShow;
-  
-      // We are only changing the view if there is a current view to change to begin with
-      var isChangingView = !!this.currentView;
-  
-      // Only destroy the current view if we don't want to `preventDestroy` and if
-      // the view given in the first argument is different than `currentView`
-      var _shouldDestroyView = isDifferentView && !preventDestroy;
-  
-      // Only show the view given in the first argument if it is different than
-      // the current view or if we want to re-show the view. Note that if
-      // `_shouldDestroyView` is true, then `_shouldShowView` is also necessarily true.
-      var _shouldShowView = isDifferentView || forceShow;
-  
-      if (isChangingView) {
-        this.triggerMethod('before:swapOut', this.currentView, this, options);
-      }
-  
-      if (this.currentView) {
-        delete this.currentView._parent;
-      }
-  
-      if (_shouldDestroyView) {
-        this.empty();
-  
-      // A `destroy` event is attached to the clean up manually removed views.
-      // We need to detach this event when a new view is going to be shown as it
-      // is no longer relevant.
-      } else if (isChangingView && _shouldShowView) {
-        this.currentView.off('destroy', this.empty, this);
-      }
-  
-      if (_shouldShowView) {
-  
-        // We need to listen for if a view is destroyed
-        // in a way other than through the region.
-        // If this happens we need to remove the reference
-        // to the currentView since once a view has been destroyed
-        // we can not reuse it.
-        view.once('destroy', this.empty, this);
-        view.render();
-  
-        view._parent = this;
-  
-        if (isChangingView) {
-          this.triggerMethod('before:swap', view, this, options);
-        }
-  
-        this.triggerMethod('before:show', view, this, options);
-        Marionette.triggerMethodOn(view, 'before:show', view, this, options);
-  
-        if (isChangingView) {
-          this.triggerMethod('swapOut', this.currentView, this, options);
-        }
-  
-        // An array of views that we're about to display
-        var attachedRegion = Marionette.isNodeAttached(this.el);
-  
-        // The views that we're about to attach to the document
-        // It's important that we prevent _getNestedViews from being executed unnecessarily
-        // as it's a potentially-slow method
-        var displayedViews = [];
-  
-        var attachOptions = _.extend({
-          triggerBeforeAttach: this.triggerBeforeAttach,
-          triggerAttach: this.triggerAttach
-        }, showOptions);
-  
-        if (attachedRegion && attachOptions.triggerBeforeAttach) {
-          displayedViews = this._displayedViews(view);
-          this._triggerAttach(displayedViews, 'before:');
-        }
-  
-        this.attachHtml(view);
-        this.currentView = view;
-  
-        if (attachedRegion && attachOptions.triggerAttach) {
-          displayedViews = this._displayedViews(view);
-          this._triggerAttach(displayedViews);
-        }
-  
-        if (isChangingView) {
-          this.triggerMethod('swap', view, this, options);
-        }
-  
-        this.triggerMethod('show', view, this, options);
-        Marionette.triggerMethodOn(view, 'show', view, this, options);
-  
-        return this;
-      }
-  
-      return this;
-    },
-  
-    triggerBeforeAttach: true,
-    triggerAttach: true,
-  
-    _triggerAttach: function(views, prefix) {
-      var eventName = (prefix || '') + 'attach';
-      _.each(views, function(view) {
-        Marionette.triggerMethodOn(view, eventName, view, this);
-      }, this);
-    },
-  
-    _displayedViews: function(view) {
-      return _.union([view], _.result(view, '_getNestedViews') || []);
-    },
-  
-    _ensureElement: function() {
-      if (!_.isObject(this.el)) {
-        this.$el = this.getEl(this.el);
-        this.el = this.$el[0];
-      }
-  
-      if (!this.$el || this.$el.length === 0) {
-        if (this.getOption('allowMissingEl')) {
-          return false;
-        } else {
-          throw new Marionette.Error('An "el" ' + this.$el.selector + ' must exist in DOM');
-        }
-      }
-      return true;
-    },
-  
-    _ensureViewIsIntact: function(view) {
-      if (!view) {
-        throw new Marionette.Error({
-          name: 'ViewNotValid',
-          message: 'The view passed is undefined and therefore invalid. You must pass a view instance to show.'
-        });
-      }
-  
-      if (view.isDestroyed) {
-        throw new Marionette.Error({
-          name: 'ViewDestroyedError',
-          message: 'View (cid: "' + view.cid + '") has already been destroyed and cannot be used.'
-        });
-      }
-    },
-  
-    // Override this method to change how the region finds the DOM
-    // element that it manages. Return a jQuery selector object scoped
-    // to a provided parent el or the document if none exists.
-    getEl: function(el) {
-      return Backbone.$(el, Marionette._getValue(this.options.parentEl, this));
-    },
-  
-    // Override this method to change how the new view is
-    // appended to the `$el` that the region is managing
-    attachHtml: function(view) {
-      this.$el.contents().detach();
-  
-      this.el.appendChild(view.el);
-    },
-  
-    // Destroy the current view, if there is one. If there is no
-    // current view, it does nothing and returns immediately.
-    empty: function(options) {
-      var view = this.currentView;
-  
-      var preventDestroy = Marionette._getValue(options, 'preventDestroy', this);
-      // If there is no view in the region
-      // we should not remove anything
-      if (!view) { return; }
-  
-      view.off('destroy', this.empty, this);
-      this.triggerMethod('before:empty', view);
-      if (!preventDestroy) {
-        this._destroyView();
-      }
-      this.triggerMethod('empty', view);
-  
-      // Remove region pointer to the currentView
-      delete this.currentView;
-  
-      if (preventDestroy) {
-        this.$el.contents().detach();
-      }
-  
-      return this;
-    },
-  
-    // call 'destroy' or 'remove', depending on which is found
-    // on the view (if showing a raw Backbone view or a Marionette View)
-    _destroyView: function() {
-      var view = this.currentView;
-  
-      if (view.destroy && !view.isDestroyed) {
-        view.destroy();
-      } else if (view.remove) {
-        view.remove();
-  
-        // appending isDestroyed to raw Backbone View allows regions
-        // to throw a ViewDestroyedError for this view
-        view.isDestroyed = true;
-      }
-    },
-  
-    // Attach an existing view to the region. This
-    // will not call `render` or `onShow` for the new view,
-    // and will not replace the current HTML for the `el`
-    // of the region.
-    attachView: function(view) {
-      this.currentView = view;
-      return this;
-    },
-  
-    // Checks whether a view is currently present within
-    // the region. Returns `true` if there is and `false` if
-    // no view is present.
-    hasView: function() {
-      return !!this.currentView;
-    },
-  
-    // Reset the region by destroying any existing view and
-    // clearing out the cached `$el`. The next time a view
-    // is shown via this region, the region will re-query the
-    // DOM for the region's `el`.
-    reset: function() {
-      this.empty();
-  
-      if (this.$el) {
-        this.el = this.$el.selector;
-      }
-  
-      delete this.$el;
-      return this;
-    }
-  
-  },
-  
-  // Static Methods
-  {
-  
-    // Build an instance of a region by passing in a configuration object
-    // and a default region class to use if none is specified in the config.
-    //
-    // The config object should either be a string as a jQuery DOM selector,
-    // a Region class directly, or an object literal that specifies a selector,
-    // a custom regionClass, and any options to be supplied to the region:
-    //
-    // ```js
-    // {
-    //   selector: "#foo",
-    //   regionClass: MyCustomRegion,
-    //   allowMissingEl: false
-    // }
-    // ```
-    //
-    buildRegion: function(regionConfig, DefaultRegionClass) {
-      if (_.isString(regionConfig)) {
-        return this._buildRegionFromSelector(regionConfig, DefaultRegionClass);
-      }
-  
-      if (regionConfig.selector || regionConfig.el || regionConfig.regionClass) {
-        return this._buildRegionFromObject(regionConfig, DefaultRegionClass);
-      }
-  
-      if (_.isFunction(regionConfig)) {
-        return this._buildRegionFromRegionClass(regionConfig);
-      }
-  
-      throw new Marionette.Error({
-        message: 'Improper region configuration type.',
-        url: 'marionette.region.html#region-configuration-types'
-      });
-    },
-  
-    // Build the region from a string selector like '#foo-region'
-    _buildRegionFromSelector: function(selector, DefaultRegionClass) {
-      return new DefaultRegionClass({el: selector});
-    },
-  
-    // Build the region from a configuration object
-    // ```js
-    // { selector: '#foo', regionClass: FooRegion, allowMissingEl: false }
-    // ```
-    _buildRegionFromObject: function(regionConfig, DefaultRegionClass) {
-      var RegionClass = regionConfig.regionClass || DefaultRegionClass;
-      var options = _.omit(regionConfig, 'selector', 'regionClass');
-  
-      if (regionConfig.selector && !options.el) {
-        options.el = regionConfig.selector;
-      }
-  
-      return new RegionClass(options);
-    },
-  
-    // Build the region directly from a given `RegionClass`
-    _buildRegionFromRegionClass: function(RegionClass) {
-      return new RegionClass();
-    }
-  });
-  
-  // Region Manager
-  // --------------
-  
-  // Manage one or more related `Marionette.Region` objects.
-  Marionette.RegionManager = Marionette.Controller.extend({
-    constructor: function(options) {
-      this._regions = {};
-      this.length = 0;
-  
-      Marionette.Controller.call(this, options);
-  
-      this.addRegions(this.getOption('regions'));
-    },
-  
-    // Add multiple regions using an object literal or a
-    // function that returns an object literal, where
-    // each key becomes the region name, and each value is
-    // the region definition.
-    addRegions: function(regionDefinitions, defaults) {
-      regionDefinitions = Marionette._getValue(regionDefinitions, this, arguments);
-  
-      return _.reduce(regionDefinitions, function(regions, definition, name) {
-        if (_.isString(definition)) {
-          definition = {selector: definition};
-        }
-        if (definition.selector) {
-          definition = _.defaults({}, definition, defaults);
-        }
-  
-        regions[name] = this.addRegion(name, definition);
-        return regions;
-      }, {}, this);
-    },
-  
-    // Add an individual region to the region manager,
-    // and return the region instance
-    addRegion: function(name, definition) {
-      var region;
-  
-      if (definition instanceof Marionette.Region) {
-        region = definition;
-      } else {
-        region = Marionette.Region.buildRegion(definition, Marionette.Region);
-      }
-  
-      this.triggerMethod('before:add:region', name, region);
-  
-      region._parent = this;
-      this._store(name, region);
-  
-      this.triggerMethod('add:region', name, region);
-      return region;
-    },
-  
-    // Get a region by name
-    get: function(name) {
-      return this._regions[name];
-    },
-  
-    // Gets all the regions contained within
-    // the `regionManager` instance.
-    getRegions: function() {
-      return _.clone(this._regions);
-    },
-  
-    // Remove a region by name
-    removeRegion: function(name) {
-      var region = this._regions[name];
-      this._remove(name, region);
-  
-      return region;
-    },
-  
-    // Empty all regions in the region manager, and
-    // remove them
-    removeRegions: function() {
-      var regions = this.getRegions();
-      _.each(this._regions, function(region, name) {
-        this._remove(name, region);
-      }, this);
-  
-      return regions;
-    },
-  
-    // Empty all regions in the region manager, but
-    // leave them attached
-    emptyRegions: function() {
-      var regions = this.getRegions();
-      _.invoke(regions, 'empty');
-      return regions;
-    },
-  
-    // Destroy all regions and shut down the region
-    // manager entirely
-    destroy: function() {
-      this.removeRegions();
-      return Marionette.Controller.prototype.destroy.apply(this, arguments);
-    },
-  
-    // internal method to store regions
-    _store: function(name, region) {
-      if (!this._regions[name]) {
-        this.length++;
-      }
-  
-      this._regions[name] = region;
-    },
-  
-    // internal method to remove a region
-    _remove: function(name, region) {
-      this.triggerMethod('before:remove:region', name, region);
-      region.empty();
-      region.stopListening();
-  
-      delete region._parent;
-      delete this._regions[name];
-      this.length--;
-      this.triggerMethod('remove:region', name, region);
-    }
-  });
-  
-  Marionette.actAsCollection(Marionette.RegionManager.prototype, '_regions');
-  
-
-  // Template Cache
-  // --------------
-  
-  // Manage templates stored in `<script>` blocks,
-  // caching them for faster access.
-  Marionette.TemplateCache = function(templateId) {
-    this.templateId = templateId;
-  };
-  
-  // TemplateCache object-level methods. Manage the template
-  // caches from these method calls instead of creating
-  // your own TemplateCache instances
-  _.extend(Marionette.TemplateCache, {
-    templateCaches: {},
-  
-    // Get the specified template by id. Either
-    // retrieves the cached version, or loads it
-    // from the DOM.
-    get: function(templateId, options) {
-      var cachedTemplate = this.templateCaches[templateId];
-  
-      if (!cachedTemplate) {
-        cachedTemplate = new Marionette.TemplateCache(templateId);
-        this.templateCaches[templateId] = cachedTemplate;
-      }
-  
-      return cachedTemplate.load(options);
-    },
-  
-    // Clear templates from the cache. If no arguments
-    // are specified, clears all templates:
-    // `clear()`
-    //
-    // If arguments are specified, clears each of the
-    // specified templates from the cache:
-    // `clear("#t1", "#t2", "...")`
-    clear: function() {
-      var i;
-      var args = _.toArray(arguments);
-      var length = args.length;
-  
-      if (length > 0) {
-        for (i = 0; i < length; i++) {
-          delete this.templateCaches[args[i]];
-        }
-      } else {
-        this.templateCaches = {};
-      }
-    }
-  });
-  
-  // TemplateCache instance methods, allowing each
-  // template cache object to manage its own state
-  // and know whether or not it has been loaded
-  _.extend(Marionette.TemplateCache.prototype, {
-  
-    // Internal method to load the template
-    load: function(options) {
-      // Guard clause to prevent loading this template more than once
-      if (this.compiledTemplate) {
-        return this.compiledTemplate;
-      }
-  
-      // Load the template and compile it
-      var template = this.loadTemplate(this.templateId, options);
-      this.compiledTemplate = this.compileTemplate(template, options);
-  
-      return this.compiledTemplate;
-    },
-  
-    // Load a template from the DOM, by default. Override
-    // this method to provide your own template retrieval
-    // For asynchronous loading with AMD/RequireJS, consider
-    // using a template-loader plugin as described here:
-    // https://github.com/marionettejs/backbone.marionette/wiki/Using-marionette-with-requirejs
-    loadTemplate: function(templateId, options) {
-      var template = Backbone.$(templateId).html();
-  
-      if (!template || template.length === 0) {
-        throw new Marionette.Error({
-          name: 'NoTemplateError',
-          message: 'Could not find template: "' + templateId + '"'
-        });
-      }
-  
-      return template;
-    },
-  
-    // Pre-compile the template before caching it. Override
-    // this method if you do not need to pre-compile a template
-    // (JST / RequireJS for example) or if you want to change
-    // the template engine used (Handebars, etc).
-    compileTemplate: function(rawTemplate, options) {
-      return _.template(rawTemplate, options);
-    }
-  });
-  
-  // Renderer
-  // --------
-  
-  // Render a template with data by passing in the template
-  // selector and the data to render.
-  Marionette.Renderer = {
-  
-    // Render a template with data. The `template` parameter is
-    // passed to the `TemplateCache` object to retrieve the
-    // template function. Override this method to provide your own
-    // custom rendering and template handling for all of Marionette.
-    render: function(template, data) {
-      if (!template) {
-        throw new Marionette.Error({
-          name: 'TemplateNotFoundError',
-          message: 'Cannot render the template since its false, null or undefined.'
-        });
-      }
-  
-      var templateFunc = _.isFunction(template) ? template : Marionette.TemplateCache.get(template);
-  
-      return templateFunc(data);
-    }
-  };
-  
-
-  /* jshint maxlen: 114, nonew: false */
-  // View
-  // ----
-  
-  // The core view class that other Marionette views extend from.
-  Marionette.View = Backbone.View.extend({
-    isDestroyed: false,
-  
-    constructor: function(options) {
-      _.bindAll(this, 'render');
-  
-      options = Marionette._getValue(options, this);
-  
-      // this exposes view options to the view initializer
-      // this is a backfill since backbone removed the assignment
-      // of this.options
-      // at some point however this may be removed
-      this.options = _.extend({}, _.result(this, 'options'), options);
-  
-      this._behaviors = Marionette.Behaviors(this);
-  
-      Backbone.View.call(this, this.options);
-  
-      Marionette.MonitorDOMRefresh(this);
-    },
-  
-    // Get the template for this view
-    // instance. You can set a `template` attribute in the view
-    // definition or pass a `template: "whatever"` parameter in
-    // to the constructor options.
-    getTemplate: function() {
-      return this.getOption('template');
-    },
-  
-    // Serialize a model by returning its attributes. Clones
-    // the attributes to allow modification.
-    serializeModel: function(model) {
-      return model.toJSON.apply(model, _.rest(arguments));
-    },
-  
-    // Mix in template helper methods. Looks for a
-    // `templateHelpers` attribute, which can either be an
-    // object literal, or a function that returns an object
-    // literal. All methods and attributes from this object
-    // are copies to the object passed in.
-    mixinTemplateHelpers: function(target) {
-      target = target || {};
-      var templateHelpers = this.getOption('templateHelpers');
-      templateHelpers = Marionette._getValue(templateHelpers, this);
-      return _.extend(target, templateHelpers);
-    },
-  
-    // normalize the keys of passed hash with the views `ui` selectors.
-    // `{"@ui.foo": "bar"}`
-    normalizeUIKeys: function(hash) {
-      var uiBindings = _.result(this, '_uiBindings');
-      return Marionette.normalizeUIKeys(hash, uiBindings || _.result(this, 'ui'));
-    },
-  
-    // normalize the values of passed hash with the views `ui` selectors.
-    // `{foo: "@ui.bar"}`
-    normalizeUIValues: function(hash, properties) {
-      var ui = _.result(this, 'ui');
-      var uiBindings = _.result(this, '_uiBindings');
-      return Marionette.normalizeUIValues(hash, uiBindings || ui, properties);
-    },
-  
-    // Configure `triggers` to forward DOM events to view
-    // events. `triggers: {"click .foo": "do:foo"}`
-    configureTriggers: function() {
-      if (!this.triggers) { return; }
-  
-      // Allow `triggers` to be configured as a function
-      var triggers = this.normalizeUIKeys(_.result(this, 'triggers'));
-  
-      // Configure the triggers, prevent default
-      // action and stop propagation of DOM events
-      return _.reduce(triggers, function(events, value, key) {
-        events[key] = this._buildViewTrigger(value);
-        return events;
-      }, {}, this);
-    },
-  
-    // Overriding Backbone.View's delegateEvents to handle
-    // the `triggers`, `modelEvents`, and `collectionEvents` configuration
-    delegateEvents: function(events) {
-      this._delegateDOMEvents(events);
-      this.bindEntityEvents(this.model, this.getOption('modelEvents'));
-      this.bindEntityEvents(this.collection, this.getOption('collectionEvents'));
-  
-      _.each(this._behaviors, function(behavior) {
-        behavior.bindEntityEvents(this.model, behavior.getOption('modelEvents'));
-        behavior.bindEntityEvents(this.collection, behavior.getOption('collectionEvents'));
-      }, this);
-  
-      return this;
-    },
-  
-    // internal method to delegate DOM events and triggers
-    _delegateDOMEvents: function(eventsArg) {
-      var events = Marionette._getValue(eventsArg || this.events, this);
-  
-      // normalize ui keys
-      events = this.normalizeUIKeys(events);
-      if (_.isUndefined(eventsArg)) {this.events = events;}
-  
-      var combinedEvents = {};
-  
-      // look up if this view has behavior events
-      var behaviorEvents = _.result(this, 'behaviorEvents') || {};
-      var triggers = this.configureTriggers();
-      var behaviorTriggers = _.result(this, 'behaviorTriggers') || {};
-  
-      // behavior events will be overriden by view events and or triggers
-      _.extend(combinedEvents, behaviorEvents, events, triggers, behaviorTriggers);
-  
-      Backbone.View.prototype.delegateEvents.call(this, combinedEvents);
-    },
-  
-    // Overriding Backbone.View's undelegateEvents to handle unbinding
-    // the `triggers`, `modelEvents`, and `collectionEvents` config
-    undelegateEvents: function() {
-      Backbone.View.prototype.undelegateEvents.apply(this, arguments);
-  
-      this.unbindEntityEvents(this.model, this.getOption('modelEvents'));
-      this.unbindEntityEvents(this.collection, this.getOption('collectionEvents'));
-  
-      _.each(this._behaviors, function(behavior) {
-        behavior.unbindEntityEvents(this.model, behavior.getOption('modelEvents'));
-        behavior.unbindEntityEvents(this.collection, behavior.getOption('collectionEvents'));
-      }, this);
-  
-      return this;
-    },
-  
-    // Internal helper method to verify whether the view hasn't been destroyed
-    _ensureViewIsIntact: function() {
-      if (this.isDestroyed) {
-        throw new Marionette.Error({
-          name: 'ViewDestroyedError',
-          message: 'View (cid: "' + this.cid + '") has already been destroyed and cannot be used.'
-        });
-      }
-    },
-  
-    // Default `destroy` implementation, for removing a view from the
-    // DOM and unbinding it. Regions will call this method
-    // for you. You can specify an `onDestroy` method in your view to
-    // add custom code that is called after the view is destroyed.
-    destroy: function() {
-      if (this.isDestroyed) { return this; }
-  
-      var args = _.toArray(arguments);
-  
-      this.triggerMethod.apply(this, ['before:destroy'].concat(args));
-  
-      // mark as destroyed before doing the actual destroy, to
-      // prevent infinite loops within "destroy" event handlers
-      // that are trying to destroy other views
-      this.isDestroyed = true;
-      this.triggerMethod.apply(this, ['destroy'].concat(args));
-  
-      // unbind UI elements
-      this.unbindUIElements();
-  
-      this.isRendered = false;
-  
-      // remove the view from the DOM
-      this.remove();
-  
-      // Call destroy on each behavior after
-      // destroying the view.
-      // This unbinds event listeners
-      // that behaviors have registered for.
-      _.invoke(this._behaviors, 'destroy', args);
-  
-      return this;
-    },
-  
-    bindUIElements: function() {
-      this._bindUIElements();
-      _.invoke(this._behaviors, this._bindUIElements);
-    },
-  
-    // This method binds the elements specified in the "ui" hash inside the view's code with
-    // the associated jQuery selectors.
-    _bindUIElements: function() {
-      if (!this.ui) { return; }
-  
-      // store the ui hash in _uiBindings so they can be reset later
-      // and so re-rendering the view will be able to find the bindings
-      if (!this._uiBindings) {
-        this._uiBindings = this.ui;
-      }
-  
-      // get the bindings result, as a function or otherwise
-      var bindings = _.result(this, '_uiBindings');
-  
-      // empty the ui so we don't have anything to start with
-      this.ui = {};
-  
-      // bind each of the selectors
-      _.each(bindings, function(selector, key) {
-        this.ui[key] = this.$(selector);
-      }, this);
-    },
-  
-    // This method unbinds the elements specified in the "ui" hash
-    unbindUIElements: function() {
-      this._unbindUIElements();
-      _.invoke(this._behaviors, this._unbindUIElements);
-    },
-  
-    _unbindUIElements: function() {
-      if (!this.ui || !this._uiBindings) { return; }
-  
-      // delete all of the existing ui bindings
-      _.each(this.ui, function($el, name) {
-        delete this.ui[name];
-      }, this);
-  
-      // reset the ui element to the original bindings configuration
-      this.ui = this._uiBindings;
-      delete this._uiBindings;
-    },
-  
-    // Internal method to create an event handler for a given `triggerDef` like
-    // 'click:foo'
-    _buildViewTrigger: function(triggerDef) {
-      var hasOptions = _.isObject(triggerDef);
-  
-      var options = _.defaults({}, (hasOptions ? triggerDef : {}), {
-        preventDefault: true,
-        stopPropagation: true
-      });
-  
-      var eventName = hasOptions ? options.event : triggerDef;
-  
-      return function(e) {
-        if (e) {
-          if (e.preventDefault && options.preventDefault) {
-            e.preventDefault();
-          }
-  
-          if (e.stopPropagation && options.stopPropagation) {
-            e.stopPropagation();
-          }
-        }
-  
-        var args = {
-          view: this,
-          model: this.model,
-          collection: this.collection
-        };
-  
-        this.triggerMethod(eventName, args);
-      };
-    },
-  
-    setElement: function() {
-      var ret = Backbone.View.prototype.setElement.apply(this, arguments);
-  
-      // proxy behavior $el to the view's $el.
-      // This is needed because a view's $el proxy
-      // is not set until after setElement is called.
-      _.invoke(this._behaviors, 'proxyViewProperties', this);
-  
-      return ret;
-    },
-  
-    // import the `triggerMethod` to trigger events with corresponding
-    // methods if the method exists
-    triggerMethod: function() {
-      var ret = Marionette._triggerMethod(this, arguments);
-  
-      this._triggerEventOnBehaviors(arguments);
-      this._triggerEventOnParentLayout(arguments[0], _.rest(arguments));
-  
-      return ret;
-    },
-  
-    _triggerEventOnBehaviors: function(args) {
-      var triggerMethod = Marionette._triggerMethod;
-      var behaviors = this._behaviors;
-      // Use good ol' for as this is a very hot function
-      for (var i = 0, length = behaviors && behaviors.length; i < length; i++) {
-        triggerMethod(behaviors[i], args);
-      }
-    },
-  
-    _triggerEventOnParentLayout: function(eventName, args) {
-      var layoutView = this._parentLayoutView();
-      if (!layoutView) {
-        return;
-      }
-  
-      // invoke triggerMethod on parent view
-      var eventPrefix = Marionette.getOption(layoutView, 'childViewEventPrefix');
-      var prefixedEventName = eventPrefix + ':' + eventName;
-  
-      Marionette._triggerMethod(layoutView, [prefixedEventName, this].concat(args));
-  
-      // call the parent view's childEvents handler
-      var childEvents = Marionette.getOption(layoutView, 'childEvents');
-      var normalizedChildEvents = layoutView.normalizeMethods(childEvents);
-  
-      if (!!normalizedChildEvents && _.isFunction(normalizedChildEvents[eventName])) {
-        normalizedChildEvents[eventName].apply(layoutView, [this].concat(args));
-      }
-    },
-  
-    // This method returns any views that are immediate
-    // children of this view
-    _getImmediateChildren: function() {
-      return [];
-    },
-  
-    // Returns an array of every nested view within this view
-    _getNestedViews: function() {
-      var children = this._getImmediateChildren();
-  
-      if (!children.length) { return children; }
-  
-      return _.reduce(children, function(memo, view) {
-        if (!view._getNestedViews) { return memo; }
-        return memo.concat(view._getNestedViews());
-      }, children);
-    },
-  
-    // Internal utility for building an ancestor
-    // view tree list.
-    _getAncestors: function() {
-      var ancestors = [];
-      var parent  = this._parent;
-  
-      while (parent) {
-        ancestors.push(parent);
-        parent = parent._parent;
-      }
-  
-      return ancestors;
-    },
-  
-    // Returns the containing parent view.
-    _parentLayoutView: function() {
-      var ancestors = this._getAncestors();
-      return _.find(ancestors, function(parent) {
-        return parent instanceof Marionette.LayoutView;
-      });
-    },
-  
-    // Imports the "normalizeMethods" to transform hashes of
-    // events=>function references/names to a hash of events=>function references
-    normalizeMethods: Marionette.normalizeMethods,
-  
-    // A handy way to merge passed-in options onto the instance
-    mergeOptions: Marionette.mergeOptions,
-  
-    // Proxy `getOption` to enable getting options from this or this.options by name.
-    getOption: Marionette.proxyGetOption,
-  
-    // Proxy `bindEntityEvents` to enable binding view's events from another entity.
-    bindEntityEvents: Marionette.proxyBindEntityEvents,
-  
-    // Proxy `unbindEntityEvents` to enable unbinding view's events from another entity.
-    unbindEntityEvents: Marionette.proxyUnbindEntityEvents
-  });
-  
-  // Item View
-  // ---------
-  
-  // A single item view implementation that contains code for rendering
-  // with underscore.js templates, serializing the view's model or collection,
-  // and calling several methods on extended views, such as `onRender`.
-  Marionette.ItemView = Marionette.View.extend({
-  
-    // Setting up the inheritance chain which allows changes to
-    // Marionette.View.prototype.constructor which allows overriding
-    constructor: function() {
-      Marionette.View.apply(this, arguments);
-    },
-  
-    // Serialize the model or collection for the view. If a model is
-    // found, the view's `serializeModel` is called. If a collection is found,
-    // each model in the collection is serialized by calling
-    // the view's `serializeCollection` and put into an `items` array in
-    // the resulting data. If both are found, defaults to the model.
-    // You can override the `serializeData` method in your own view definition,
-    // to provide custom serialization for your view's data.
-    serializeData: function() {
-      if (!this.model && !this.collection) {
-        return {};
-      }
-  
-      var args = [this.model || this.collection];
-      if (arguments.length) {
-        args.push.apply(args, arguments);
-      }
-  
-      if (this.model) {
-        return this.serializeModel.apply(this, args);
-      } else {
-        return {
-          items: this.serializeCollection.apply(this, args)
-        };
-      }
-    },
-  
-    // Serialize a collection by serializing each of its models.
-    serializeCollection: function(collection) {
-      return collection.toJSON.apply(collection, _.rest(arguments));
-    },
-  
-    // Render the view, defaulting to underscore.js templates.
-    // You can override this in your view definition to provide
-    // a very specific rendering for your view. In general, though,
-    // you should override the `Marionette.Renderer` object to
-    // change how Marionette renders views.
-    render: function() {
-      this._ensureViewIsIntact();
-  
-      this.triggerMethod('before:render', this);
-  
-      this._renderTemplate();
-      this.isRendered = true;
-      this.bindUIElements();
-  
-      this.triggerMethod('render', this);
-  
-      return this;
-    },
-  
-    // Internal method to render the template with the serialized data
-    // and template helpers via the `Marionette.Renderer` object.
-    // Throws an `UndefinedTemplateError` error if the template is
-    // any falsely value but literal `false`.
-    _renderTemplate: function() {
-      var template = this.getTemplate();
-  
-      // Allow template-less item views
-      if (template === false) {
-        return;
-      }
-  
-      if (!template) {
-        throw new Marionette.Error({
-          name: 'UndefinedTemplateError',
-          message: 'Cannot render the template since it is null or undefined.'
-        });
-      }
-  
-      // Add in entity data and template helpers
-      var data = this.mixinTemplateHelpers(this.serializeData());
-  
-      // Render and add to el
-      var html = Marionette.Renderer.render(template, data, this);
-      this.attachElContent(html);
-  
-      return this;
-    },
-  
-    // Attaches the content of a given view.
-    // This method can be overridden to optimize rendering,
-    // or to render in a non standard way.
-    //
-    // For example, using `innerHTML` instead of `$el.html`
-    //
-    // ```js
-    // attachElContent: function(html) {
-    //   this.el.innerHTML = html;
-    //   return this;
-    // }
-    // ```
-    attachElContent: function(html) {
-      this.$el.html(html);
-  
-      return this;
-    }
-  });
-  
-  /* jshint maxstatements: 20, maxcomplexity: 7 */
-  
-  // Collection View
-  // ---------------
-  
-  // A view that iterates over a Backbone.Collection
-  // and renders an individual child view for each model.
-  Marionette.CollectionView = Marionette.View.extend({
-  
-    // used as the prefix for child view events
-    // that are forwarded through the collectionview
-    childViewEventPrefix: 'childview',
-  
-    // flag for maintaining the sorted order of the collection
-    sort: true,
-  
-    // constructor
-    // option to pass `{sort: false}` to prevent the `CollectionView` from
-    // maintaining the sorted order of the collection.
-    // This will fallback onto appending childView's to the end.
-    //
-    // option to pass `{comparator: compFunction()}` to allow the `CollectionView`
-    // to use a custom sort order for the collection.
-    constructor: function(options) {
-      this.once('render', this._initialEvents);
-      this._initChildViewStorage();
-  
-      Marionette.View.apply(this, arguments);
-  
-      this.on({
-        'before:show':   this._onBeforeShowCalled,
-        'show':          this._onShowCalled,
-        'before:attach': this._onBeforeAttachCalled,
-        'attach':        this._onAttachCalled
-      });
-      this.initRenderBuffer();
-    },
-  
-    // Instead of inserting elements one by one into the page,
-    // it's much more performant to insert elements into a document
-    // fragment and then insert that document fragment into the page
-    initRenderBuffer: function() {
-      this._bufferedChildren = [];
-    },
-  
-    startBuffering: function() {
-      this.initRenderBuffer();
-      this.isBuffering = true;
-    },
-  
-    endBuffering: function() {
-      // Only trigger attach if already shown and attached, otherwise Region#show() handles this.
-      var canTriggerAttach = this._isShown && Marionette.isNodeAttached(this.el);
-      var nestedViews;
-  
-      this.isBuffering = false;
-  
-      if (this._isShown) {
-        this._triggerMethodMany(this._bufferedChildren, this, 'before:show');
-      }
-      if (canTriggerAttach && this._triggerBeforeAttach) {
-        nestedViews = this._getNestedViews();
-        this._triggerMethodMany(nestedViews, this, 'before:attach');
-      }
-  
-      this.attachBuffer(this, this._createBuffer());
-  
-      if (canTriggerAttach && this._triggerAttach) {
-        nestedViews = this._getNestedViews();
-        this._triggerMethodMany(nestedViews, this, 'attach');
-      }
-      if (this._isShown) {
-        this._triggerMethodMany(this._bufferedChildren, this, 'show');
-      }
-      this.initRenderBuffer();
-    },
-  
-    _triggerMethodMany: function(targets, source, eventName) {
-      var args = _.drop(arguments, 3);
-  
-      _.each(targets, function(target) {
-        Marionette.triggerMethodOn.apply(target, [target, eventName, target, source].concat(args));
-      });
-    },
-  
-    // Configured the initial events that the collection view
-    // binds to.
-    _initialEvents: function() {
-      if (this.collection) {
-        this.listenTo(this.collection, 'add', this._onCollectionAdd);
-        this.listenTo(this.collection, 'remove', this._onCollectionRemove);
-        this.listenTo(this.collection, 'reset', this.render);
-  
-        if (this.getOption('sort')) {
-          this.listenTo(this.collection, 'sort', this._sortViews);
-        }
-      }
-    },
-  
-    // Handle a child added to the collection
-    _onCollectionAdd: function(child, collection, opts) {
-      var index;
-      if (opts.at !== undefined) {
-        index = opts.at;
-      } else {
-        index = _.indexOf(this._filteredSortedModels(), child);
-      }
-  
-      if (this._shouldAddChild(child, index)) {
-        this.destroyEmptyView();
-        var ChildView = this.getChildView(child);
-        this.addChild(child, ChildView, index);
-      }
-    },
-  
-    // get the child view by model it holds, and remove it
-    _onCollectionRemove: function(model) {
-      var view = this.children.findByModel(model);
-      this.removeChildView(view);
-      this.checkEmpty();
-    },
-  
-    _onBeforeShowCalled: function() {
-      // Reset attach event flags at the top of the Region#show() event lifecycle; if the Region's
-      // show() options permit onBeforeAttach/onAttach events, these flags will be set true again.
-      this._triggerBeforeAttach = this._triggerAttach = false;
-      this.children.each(function(childView) {
-        Marionette.triggerMethodOn(childView, 'before:show', childView);
-      });
-    },
-  
-    _onShowCalled: function() {
-      this.children.each(function(childView) {
-        Marionette.triggerMethodOn(childView, 'show', childView);
-      });
-    },
-  
-    // If during Region#show() onBeforeAttach was fired, continue firing it for child views
-    _onBeforeAttachCalled: function() {
-      this._triggerBeforeAttach = true;
-    },
-  
-    // If during Region#show() onAttach was fired, continue firing it for child views
-    _onAttachCalled: function() {
-      this._triggerAttach = true;
-    },
-  
-    // Render children views. Override this method to
-    // provide your own implementation of a render function for
-    // the collection view.
-    render: function() {
-      this._ensureViewIsIntact();
-      this.triggerMethod('before:render', this);
-      this._renderChildren();
-      this.isRendered = true;
-      this.triggerMethod('render', this);
-      return this;
-    },
-  
-    // Reorder DOM after sorting. When your element's rendering
-    // do not use their index, you can pass reorderOnSort: true
-    // to only reorder the DOM after a sort instead of rendering
-    // all the collectionView
-    reorder: function() {
-      var children = this.children;
-      var models = this._filteredSortedModels();
-      var modelsChanged = _.find(models, function(model) {
-        return !children.findByModel(model);
-      });
-  
-      // If the models we're displaying have changed due to filtering
-      // We need to add and/or remove child views
-      // So render as normal
-      if (modelsChanged) {
-        this.render();
-      } else {
-        // get the DOM nodes in the same order as the models
-        var els = _.map(models, function(model, index) {
-          var view = children.findByModel(model);
-          view._index = index;
-          return view.el;
-        });
-  
-        // since append moves elements that are already in the DOM,
-        // appending the elements will effectively reorder them
-        this.triggerMethod('before:reorder');
-        this._appendReorderedChildren(els);
-        this.triggerMethod('reorder');
-      }
-    },
-  
-    // Render view after sorting. Override this method to
-    // change how the view renders after a `sort` on the collection.
-    // An example of this would be to only `renderChildren` in a `CompositeView`
-    // rather than the full view.
-    resortView: function() {
-      if (Marionette.getOption(this, 'reorderOnSort')) {
-        this.reorder();
-      } else {
-        this.render();
-      }
-    },
-  
-    // Internal method. This checks for any changes in the order of the collection.
-    // If the index of any view doesn't match, it will render.
-    _sortViews: function() {
-      var models = this._filteredSortedModels();
-  
-      // check for any changes in sort order of views
-      var orderChanged = _.find(models, function(item, index) {
-        var view = this.children.findByModel(item);
-        return !view || view._index !== index;
-      }, this);
-  
-      if (orderChanged) {
-        this.resortView();
-      }
-    },
-  
-    // Internal reference to what index a `emptyView` is.
-    _emptyViewIndex: -1,
-  
-    // Internal method. Separated so that CompositeView can append to the childViewContainer
-    // if necessary
-    _appendReorderedChildren: function(children) {
-      this.$el.append(children);
-    },
-  
-    // Internal method. Separated so that CompositeView can have
-    // more control over events being triggered, around the rendering
-    // process
-    _renderChildren: function() {
-      this.destroyEmptyView();
-      this.destroyChildren({checkEmpty: false});
-  
-      if (this.isEmpty(this.collection)) {
-        this.showEmptyView();
-      } else {
-        this.triggerMethod('before:render:collection', this);
-        this.startBuffering();
-        this.showCollection();
-        this.endBuffering();
-        this.triggerMethod('render:collection', this);
-  
-        // If we have shown children and none have passed the filter, show the empty view
-        if (this.children.isEmpty()) {
-          this.showEmptyView();
-        }
-      }
-    },
-  
-    // Internal method to loop through collection and show each child view.
-    showCollection: function() {
-      var ChildView;
-  
-      var models = this._filteredSortedModels();
-  
-      _.each(models, function(child, index) {
-        ChildView = this.getChildView(child);
-        this.addChild(child, ChildView, index);
-      }, this);
-    },
-  
-    // Allow the collection to be sorted by a custom view comparator
-    _filteredSortedModels: function() {
-      var models;
-      var viewComparator = this.getViewComparator();
-  
-      if (viewComparator) {
-        if (_.isString(viewComparator) || viewComparator.length === 1) {
-          models = this.collection.sortBy(viewComparator, this);
-        } else {
-          models = _.clone(this.collection.models).sort(_.bind(viewComparator, this));
-        }
-      } else {
-        models = this.collection.models;
-      }
-  
-      // Filter after sorting in case the filter uses the index
-      if (this.getOption('filter')) {
-        models = _.filter(models, function(model, index) {
-          return this._shouldAddChild(model, index);
-        }, this);
-      }
-  
-      return models;
-    },
-  
-    // Internal method to show an empty view in place of
-    // a collection of child views, when the collection is empty
-    showEmptyView: function() {
-      var EmptyView = this.getEmptyView();
-  
-      if (EmptyView && !this._showingEmptyView) {
-        this.triggerMethod('before:render:empty');
-  
-        this._showingEmptyView = true;
-        var model = new Backbone.Model();
-        this.addEmptyView(model, EmptyView);
-  
-        this.triggerMethod('render:empty');
-      }
-    },
-  
-    // Internal method to destroy an existing emptyView instance
-    // if one exists. Called when a collection view has been
-    // rendered empty, and then a child is added to the collection.
-    destroyEmptyView: function() {
-      if (this._showingEmptyView) {
-        this.triggerMethod('before:remove:empty');
-  
-        this.destroyChildren();
-        delete this._showingEmptyView;
-  
-        this.triggerMethod('remove:empty');
-      }
-    },
-  
-    // Retrieve the empty view class
-    getEmptyView: function() {
-      return this.getOption('emptyView');
-    },
-  
-    // Render and show the emptyView. Similar to addChild method
-    // but "add:child" events are not fired, and the event from
-    // emptyView are not forwarded
-    addEmptyView: function(child, EmptyView) {
-      // Only trigger attach if already shown, attached, and not buffering, otherwise endBuffer() or
-      // Region#show() handles this.
-      var canTriggerAttach = this._isShown && !this.isBuffering && Marionette.isNodeAttached(this.el);
-      var nestedViews;
-  
-      // get the emptyViewOptions, falling back to childViewOptions
-      var emptyViewOptions = this.getOption('emptyViewOptions') ||
-                            this.getOption('childViewOptions');
-  
-      if (_.isFunction(emptyViewOptions)) {
-        emptyViewOptions = emptyViewOptions.call(this, child, this._emptyViewIndex);
-      }
-  
-      // build the empty view
-      var view = this.buildChildView(child, EmptyView, emptyViewOptions);
-  
-      view._parent = this;
-  
-      // Proxy emptyView events
-      this.proxyChildEvents(view);
-  
-      // trigger the 'before:show' event on `view` if the collection view has already been shown
-      if (this._isShown) {
-        Marionette.triggerMethodOn(view, 'before:show', view);
-      }
-  
-      // Store the `emptyView` like a `childView` so we can properly
-      // remove and/or close it later
-      this.children.add(view);
-  
-      // Trigger `before:attach` following `render` to avoid adding logic and event triggers
-      // to public method `renderChildView()`.
-      if (canTriggerAttach && this._triggerBeforeAttach) {
-        nestedViews = [view].concat(view._getNestedViews());
-        view.once('render', function() {
-          this._triggerMethodMany(nestedViews, this, 'before:attach');
-        }, this);
-      }
-  
-      // Render it and show it
-      this.renderChildView(view, this._emptyViewIndex);
-  
-      // Trigger `attach`
-      if (canTriggerAttach && this._triggerAttach) {
-        nestedViews = [view].concat(view._getNestedViews());
-        this._triggerMethodMany(nestedViews, this, 'attach');
-      }
-      // call the 'show' method if the collection view has already been shown
-      if (this._isShown) {
-        Marionette.triggerMethodOn(view, 'show', view);
-      }
-    },
-  
-    // Retrieve the `childView` class, either from `this.options.childView`
-    // or from the `childView` in the object definition. The "options"
-    // takes precedence.
-    // This method receives the model that will be passed to the instance
-    // created from this `childView`. Overriding methods may use the child
-    // to determine what `childView` class to return.
-    getChildView: function(child) {
-      var childView = this.getOption('childView');
-  
-      if (!childView) {
-        throw new Marionette.Error({
-          name: 'NoChildViewError',
-          message: 'A "childView" must be specified'
-        });
-      }
-  
-      return childView;
-    },
-  
-    // Render the child's view and add it to the
-    // HTML for the collection view at a given index.
-    // This will also update the indices of later views in the collection
-    // in order to keep the children in sync with the collection.
-    addChild: function(child, ChildView, index) {
-      var childViewOptions = this.getOption('childViewOptions');
-      childViewOptions = Marionette._getValue(childViewOptions, this, [child, index]);
-  
-      var view = this.buildChildView(child, ChildView, childViewOptions);
-  
-      // increment indices of views after this one
-      this._updateIndices(view, true, index);
-  
-      this.triggerMethod('before:add:child', view);
-      this._addChildView(view, index);
-      this.triggerMethod('add:child', view);
-  
-      view._parent = this;
-  
-      return view;
-    },
-  
-    // Internal method. This decrements or increments the indices of views after the
-    // added/removed view to keep in sync with the collection.
-    _updateIndices: function(view, increment, index) {
-      if (!this.getOption('sort')) {
-        return;
-      }
-  
-      if (increment) {
-        // assign the index to the view
-        view._index = index;
-      }
-  
-      // update the indexes of views after this one
-      this.children.each(function(laterView) {
-        if (laterView._index >= view._index) {
-          laterView._index += increment ? 1 : -1;
-        }
-      });
-    },
-  
-    // Internal Method. Add the view to children and render it at
-    // the given index.
-    _addChildView: function(view, index) {
-      // Only trigger attach if already shown, attached, and not buffering, otherwise endBuffer() or
-      // Region#show() handles this.
-      var canTriggerAttach = this._isShown && !this.isBuffering && Marionette.isNodeAttached(this.el);
-      var nestedViews;
-  
-      // set up the child view event forwarding
-      this.proxyChildEvents(view);
-  
-      // trigger the 'before:show' event on `view` if the collection view has already been shown
-      if (this._isShown && !this.isBuffering) {
-        Marionette.triggerMethodOn(view, 'before:show', view);
-      }
-  
-      // Store the child view itself so we can properly remove and/or destroy it later
-      this.children.add(view);
-  
-      // Trigger `before:attach` following `render` to avoid adding logic and event triggers
-      // to public method `renderChildView()`.
-      if (canTriggerAttach && this._triggerBeforeAttach) {
-        nestedViews = [view].concat(view._getNestedViews());
-        view.once('render', function() {
-          this._triggerMethodMany(nestedViews, this, 'before:attach');
-        }, this);
-      }
-  
-      this.renderChildView(view, index);
-  
-      // Trigger `attach`
-      if (canTriggerAttach && this._triggerAttach) {
-        nestedViews = [view].concat(view._getNestedViews());
-        this._triggerMethodMany(nestedViews, this, 'attach');
-      }
-      // Trigger `show`
-      if (this._isShown && !this.isBuffering) {
-        Marionette.triggerMethodOn(view, 'show', view);
-      }
-    },
-  
-    // render the child view
-    renderChildView: function(view, index) {
-      view.render();
-      this.attachHtml(this, view, index);
-      return view;
-    },
-  
-    // Build a `childView` for a model in the collection.
-    buildChildView: function(child, ChildViewClass, childViewOptions) {
-      var options = _.extend({model: child}, childViewOptions);
-      return new ChildViewClass(options);
-    },
-  
-    // Remove the child view and destroy it.
-    // This function also updates the indices of
-    // later views in the collection in order to keep
-    // the children in sync with the collection.
-    removeChildView: function(view) {
-  
-      if (view) {
-        this.triggerMethod('before:remove:child', view);
-  
-        // call 'destroy' or 'remove', depending on which is found
-        if (view.destroy) {
-          view.destroy();
-        } else if (view.remove) {
-          view.remove();
-        }
-  
-        delete view._parent;
-        this.stopListening(view);
-        this.children.remove(view);
-        this.triggerMethod('remove:child', view);
-  
-        // decrement the index of views after this one
-        this._updateIndices(view, false);
-      }
-  
-      return view;
-    },
-  
-    // check if the collection is empty
-    isEmpty: function() {
-      return !this.collection || this.collection.length === 0;
-    },
-  
-    // If empty, show the empty view
-    checkEmpty: function() {
-      if (this.isEmpty(this.collection)) {
-        this.showEmptyView();
-      }
-    },
-  
-    // You might need to override this if you've overridden attachHtml
-    attachBuffer: function(collectionView, buffer) {
-      collectionView.$el.append(buffer);
-    },
-  
-    // Create a fragment buffer from the currently buffered children
-    _createBuffer: function() {
-      var elBuffer = document.createDocumentFragment();
-      _.each(this._bufferedChildren, function(b) {
-        elBuffer.appendChild(b.el);
-      });
-      return elBuffer;
-    },
-  
-    // Append the HTML to the collection's `el`.
-    // Override this method to do something other
-    // than `.append`.
-    attachHtml: function(collectionView, childView, index) {
-      if (collectionView.isBuffering) {
-        // buffering happens on reset events and initial renders
-        // in order to reduce the number of inserts into the
-        // document, which are expensive.
-        collectionView._bufferedChildren.splice(index, 0, childView);
-      } else {
-        // If we've already rendered the main collection, append
-        // the new child into the correct order if we need to. Otherwise
-        // append to the end.
-        if (!collectionView._insertBefore(childView, index)) {
-          collectionView._insertAfter(childView);
-        }
-      }
-    },
-  
-    // Internal method. Check whether we need to insert the view into
-    // the correct position.
-    _insertBefore: function(childView, index) {
-      var currentView;
-      var findPosition = this.getOption('sort') && (index < this.children.length - 1);
-      if (findPosition) {
-        // Find the view after this one
-        currentView = this.children.find(function(view) {
-          return view._index === index + 1;
-        });
-      }
-  
-      if (currentView) {
-        currentView.$el.before(childView.el);
-        return true;
-      }
-  
-      return false;
-    },
-  
-    // Internal method. Append a view to the end of the $el
-    _insertAfter: function(childView) {
-      this.$el.append(childView.el);
-    },
-  
-    // Internal method to set up the `children` object for
-    // storing all of the child views
-    _initChildViewStorage: function() {
-      this.children = new Backbone.ChildViewContainer();
-    },
-  
-    // Handle cleanup and other destroying needs for the collection of views
-    destroy: function() {
-      if (this.isDestroyed) { return this; }
-  
-      this.triggerMethod('before:destroy:collection');
-      this.destroyChildren({checkEmpty: false});
-      this.triggerMethod('destroy:collection');
-  
-      return Marionette.View.prototype.destroy.apply(this, arguments);
-    },
-  
-    // Destroy the child views that this collection view
-    // is holding on to, if any
-    destroyChildren: function(options) {
-      var destroyOptions = options || {};
-      var shouldCheckEmpty = true;
-      var childViews = this.children.map(_.identity);
-  
-      if (!_.isUndefined(destroyOptions.checkEmpty)) {
-        shouldCheckEmpty = destroyOptions.checkEmpty;
-      }
-  
-      this.children.each(this.removeChildView, this);
-  
-      if (shouldCheckEmpty) {
-        this.checkEmpty();
-      }
-      return childViews;
-    },
-  
-    // Return true if the given child should be shown
-    // Return false otherwise
-    // The filter will be passed (child, index, collection)
-    // Where
-    //  'child' is the given model
-    //  'index' is the index of that model in the collection
-    //  'collection' is the collection referenced by this CollectionView
-    _shouldAddChild: function(child, index) {
-      var filter = this.getOption('filter');
-      return !_.isFunction(filter) || filter.call(this, child, index, this.collection);
-    },
-  
-    // Set up the child view event forwarding. Uses a "childview:"
-    // prefix in front of all forwarded events.
-    proxyChildEvents: function(view) {
-      var prefix = this.getOption('childViewEventPrefix');
-  
-      // Forward all child view events through the parent,
-      // prepending "childview:" to the event name
-      this.listenTo(view, 'all', function() {
-        var args = _.toArray(arguments);
-        var rootEvent = args[0];
-        var childEvents = this.normalizeMethods(_.result(this, 'childEvents'));
-  
-        args[0] = prefix + ':' + rootEvent;
-        args.splice(1, 0, view);
-  
-        // call collectionView childEvent if defined
-        if (typeof childEvents !== 'undefined' && _.isFunction(childEvents[rootEvent])) {
-          childEvents[rootEvent].apply(this, args.slice(1));
-        }
-  
-        this.triggerMethod.apply(this, args);
-      });
-    },
-  
-    _getImmediateChildren: function() {
-      return _.values(this.children._views);
-    },
-  
-    getViewComparator: function() {
-      return this.getOption('viewComparator');
-    }
-  });
-  
-  /* jshint maxstatements: 17, maxlen: 117 */
-  
-  // Composite View
-  // --------------
-  
-  // Used for rendering a branch-leaf, hierarchical structure.
-  // Extends directly from CollectionView and also renders an
-  // a child view as `modelView`, for the top leaf
-  Marionette.CompositeView = Marionette.CollectionView.extend({
-  
-    // Setting up the inheritance chain which allows changes to
-    // Marionette.CollectionView.prototype.constructor which allows overriding
-    // option to pass '{sort: false}' to prevent the CompositeView from
-    // maintaining the sorted order of the collection.
-    // This will fallback onto appending childView's to the end.
-    constructor: function() {
-      Marionette.CollectionView.apply(this, arguments);
-    },
-  
-    // Configured the initial events that the composite view
-    // binds to. Override this method to prevent the initial
-    // events, or to add your own initial events.
-    _initialEvents: function() {
-  
-      // Bind only after composite view is rendered to avoid adding child views
-      // to nonexistent childViewContainer
-  
-      if (this.collection) {
-        this.listenTo(this.collection, 'add', this._onCollectionAdd);
-        this.listenTo(this.collection, 'remove', this._onCollectionRemove);
-        this.listenTo(this.collection, 'reset', this._renderChildren);
-  
-        if (this.getOption('sort')) {
-          this.listenTo(this.collection, 'sort', this._sortViews);
-        }
-      }
-    },
-  
-    // Retrieve the `childView` to be used when rendering each of
-    // the items in the collection. The default is to return
-    // `this.childView` or Marionette.CompositeView if no `childView`
-    // has been defined
-    getChildView: function(child) {
-      var childView = this.getOption('childView') || this.constructor;
-  
-      return childView;
-    },
-  
-    // Serialize the model for the view.
-    // You can override the `serializeData` method in your own view
-    // definition, to provide custom serialization for your view's data.
-    serializeData: function() {
-      var data = {};
-  
-      if (this.model) {
-        data = _.partial(this.serializeModel, this.model).apply(this, arguments);
-      }
-  
-      return data;
-    },
-  
-    // Renders the model and the collection.
-    render: function() {
-      this._ensureViewIsIntact();
-      this._isRendering = true;
-      this.resetChildViewContainer();
-  
-      this.triggerMethod('before:render', this);
-  
-      this._renderTemplate();
-      this._renderChildren();
-  
-      this._isRendering = false;
-      this.isRendered = true;
-      this.triggerMethod('render', this);
-      return this;
-    },
-  
-    _renderChildren: function() {
-      if (this.isRendered || this._isRendering) {
-        Marionette.CollectionView.prototype._renderChildren.call(this);
-      }
-    },
-  
-    // Render the root template that the children
-    // views are appended to
-    _renderTemplate: function() {
-      var data = {};
-      data = this.serializeData();
-      data = this.mixinTemplateHelpers(data);
-  
-      this.triggerMethod('before:render:template');
-  
-      var template = this.getTemplate();
-      var html = Marionette.Renderer.render(template, data, this);
-      this.attachElContent(html);
-  
-      // the ui bindings is done here and not at the end of render since they
-      // will not be available until after the model is rendered, but should be
-      // available before the collection is rendered.
-      this.bindUIElements();
-      this.triggerMethod('render:template');
-    },
-  
-    // Attaches the content of the root.
-    // This method can be overridden to optimize rendering,
-    // or to render in a non standard way.
-    //
-    // For example, using `innerHTML` instead of `$el.html`
-    //
-    // ```js
-    // attachElContent: function(html) {
-    //   this.el.innerHTML = html;
-    //   return this;
-    // }
-    // ```
-    attachElContent: function(html) {
-      this.$el.html(html);
-  
-      return this;
-    },
-  
-    // You might need to override this if you've overridden attachHtml
-    attachBuffer: function(compositeView, buffer) {
-      var $container = this.getChildViewContainer(compositeView);
-      $container.append(buffer);
-    },
-  
-    // Internal method. Append a view to the end of the $el.
-    // Overidden from CollectionView to ensure view is appended to
-    // childViewContainer
-    _insertAfter: function(childView) {
-      var $container = this.getChildViewContainer(this, childView);
-      $container.append(childView.el);
-    },
-  
-    // Internal method. Append reordered childView'.
-    // Overidden from CollectionView to ensure reordered views
-    // are appended to childViewContainer
-    _appendReorderedChildren: function(children) {
-      var $container = this.getChildViewContainer(this);
-      $container.append(children);
-    },
-  
-    // Internal method to ensure an `$childViewContainer` exists, for the
-    // `attachHtml` method to use.
-    getChildViewContainer: function(containerView, childView) {
-      if (!!containerView.$childViewContainer) {
-        return containerView.$childViewContainer;
-      }
-  
-      var container;
-      var childViewContainer = Marionette.getOption(containerView, 'childViewContainer');
-      if (childViewContainer) {
-  
-        var selector = Marionette._getValue(childViewContainer, containerView);
-  
-        if (selector.charAt(0) === '@' && containerView.ui) {
-          container = containerView.ui[selector.substr(4)];
-        } else {
-          container = containerView.$(selector);
-        }
-  
-        if (container.length <= 0) {
-          throw new Marionette.Error({
-            name: 'ChildViewContainerMissingError',
-            message: 'The specified "childViewContainer" was not found: ' + containerView.childViewContainer
-          });
-        }
-  
-      } else {
-        container = containerView.$el;
-      }
-  
-      containerView.$childViewContainer = container;
-      return container;
-    },
-  
-    // Internal method to reset the `$childViewContainer` on render
-    resetChildViewContainer: function() {
-      if (this.$childViewContainer) {
-        this.$childViewContainer = undefined;
-      }
-    }
-  });
-  
-  // Layout View
-  // -----------
-  
-  // Used for managing application layoutViews, nested layoutViews and
-  // multiple regions within an application or sub-application.
-  //
-  // A specialized view class that renders an area of HTML and then
-  // attaches `Region` instances to the specified `regions`.
-  // Used for composite view management and sub-application areas.
-  Marionette.LayoutView = Marionette.ItemView.extend({
-    regionClass: Marionette.Region,
-  
-    options: {
-      destroyImmediate: false
-    },
-  
-    // used as the prefix for child view events
-    // that are forwarded through the layoutview
-    childViewEventPrefix: 'childview',
-  
-    // Ensure the regions are available when the `initialize` method
-    // is called.
-    constructor: function(options) {
-      options = options || {};
-  
-      this._firstRender = true;
-      this._initializeRegions(options);
-  
-      Marionette.ItemView.call(this, options);
-    },
-  
-    // LayoutView's render will use the existing region objects the
-    // first time it is called. Subsequent calls will destroy the
-    // views that the regions are showing and then reset the `el`
-    // for the regions to the newly rendered DOM elements.
-    render: function() {
-      this._ensureViewIsIntact();
-  
-      if (this._firstRender) {
-        // if this is the first render, don't do anything to
-        // reset the regions
-        this._firstRender = false;
-      } else {
-        // If this is not the first render call, then we need to
-        // re-initialize the `el` for each region
-        this._reInitializeRegions();
-      }
-  
-      return Marionette.ItemView.prototype.render.apply(this, arguments);
-    },
-  
-    // Handle destroying regions, and then destroy the view itself.
-    destroy: function() {
-      if (this.isDestroyed) { return this; }
-      // #2134: remove parent element before destroying the child views, so
-      // removing the child views doesn't retrigger repaints
-      if (this.getOption('destroyImmediate') === true) {
-        this.$el.remove();
-      }
-      this.regionManager.destroy();
-      return Marionette.ItemView.prototype.destroy.apply(this, arguments);
-    },
-  
-    showChildView: function(regionName, view) {
-      return this.getRegion(regionName).show(view);
-    },
-  
-    getChildView: function(regionName) {
-      return this.getRegion(regionName).currentView;
-    },
-  
-    // Add a single region, by name, to the layoutView
-    addRegion: function(name, definition) {
-      var regions = {};
-      regions[name] = definition;
-      return this._buildRegions(regions)[name];
-    },
-  
-    // Add multiple regions as a {name: definition, name2: def2} object literal
-    addRegions: function(regions) {
-      this.regions = _.extend({}, this.regions, regions);
-      return this._buildRegions(regions);
-    },
-  
-    // Remove a single region from the LayoutView, by name
-    removeRegion: function(name) {
-      delete this.regions[name];
-      return this.regionManager.removeRegion(name);
-    },
-  
-    // Provides alternative access to regions
-    // Accepts the region name
-    // getRegion('main')
-    getRegion: function(region) {
-      return this.regionManager.get(region);
-    },
-  
-    // Get all regions
-    getRegions: function() {
-      return this.regionManager.getRegions();
-    },
-  
-    // internal method to build regions
-    _buildRegions: function(regions) {
-      var defaults = {
-        regionClass: this.getOption('regionClass'),
-        parentEl: _.partial(_.result, this, 'el')
-      };
-  
-      return this.regionManager.addRegions(regions, defaults);
-    },
-  
-    // Internal method to initialize the regions that have been defined in a
-    // `regions` attribute on this layoutView.
-    _initializeRegions: function(options) {
-      var regions;
-      this._initRegionManager();
-  
-      regions = Marionette._getValue(this.regions, this, [options]) || {};
-  
-      // Enable users to define `regions` as instance options.
-      var regionOptions = this.getOption.call(options, 'regions');
-  
-      // enable region options to be a function
-      regionOptions = Marionette._getValue(regionOptions, this, [options]);
-  
-      _.extend(regions, regionOptions);
-  
-      // Normalize region selectors hash to allow
-      // a user to use the @ui. syntax.
-      regions = this.normalizeUIValues(regions, ['selector', 'el']);
-  
-      this.addRegions(regions);
-    },
-  
-    // Internal method to re-initialize all of the regions by updating the `el` that
-    // they point to
-    _reInitializeRegions: function() {
-      this.regionManager.invoke('reset');
-    },
-  
-    // Enable easy overriding of the default `RegionManager`
-    // for customized region interactions and business specific
-    // view logic for better control over single regions.
-    getRegionManager: function() {
-      return new Marionette.RegionManager();
-    },
-  
-    // Internal method to initialize the region manager
-    // and all regions in it
-    _initRegionManager: function() {
-      this.regionManager = this.getRegionManager();
-      this.regionManager._parent = this;
-  
-      this.listenTo(this.regionManager, 'before:add:region', function(name) {
-        this.triggerMethod('before:add:region', name);
-      });
-  
-      this.listenTo(this.regionManager, 'add:region', function(name, region) {
-        this[name] = region;
-        this.triggerMethod('add:region', name, region);
-      });
-  
-      this.listenTo(this.regionManager, 'before:remove:region', function(name) {
-        this.triggerMethod('before:remove:region', name);
-      });
-  
-      this.listenTo(this.regionManager, 'remove:region', function(name, region) {
-        delete this[name];
-        this.triggerMethod('remove:region', name, region);
-      });
-    },
-  
-    _getImmediateChildren: function() {
-      return _.chain(this.regionManager.getRegions())
-        .pluck('currentView')
-        .compact()
-        .value();
-    }
-  });
-  
-
-  // Behavior
-  // --------
-  
-  // A Behavior is an isolated set of DOM /
-  // user interactions that can be mixed into any View.
-  // Behaviors allow you to blackbox View specific interactions
-  // into portable logical chunks, keeping your views simple and your code DRY.
-  
-  Marionette.Behavior = Marionette.Object.extend({
-    constructor: function(options, view) {
-      // Setup reference to the view.
-      // this comes in handle when a behavior
-      // wants to directly talk up the chain
-      // to the view.
-      this.view = view;
-      this.defaults = _.result(this, 'defaults') || {};
-      this.options  = _.extend({}, this.defaults, options);
-      // Construct an internal UI hash using
-      // the views UI hash and then the behaviors UI hash.
-      // This allows the user to use UI hash elements
-      // defined in the parent view as well as those
-      // defined in the given behavior.
-      this.ui = _.extend({}, _.result(view, 'ui'), _.result(this, 'ui'));
-  
-      Marionette.Object.apply(this, arguments);
-    },
-  
-    // proxy behavior $ method to the view
-    // this is useful for doing jquery DOM lookups
-    // scoped to behaviors view.
-    $: function() {
-      return this.view.$.apply(this.view, arguments);
-    },
-  
-    // Stops the behavior from listening to events.
-    // Overrides Object#destroy to prevent additional events from being triggered.
-    destroy: function() {
-      this.stopListening();
-  
-      return this;
-    },
-  
-    proxyViewProperties: function(view) {
-      this.$el = view.$el;
-      this.el = view.el;
-    }
-  });
-  
-  /* jshint maxlen: 143 */
-  // Behaviors
-  // ---------
-  
-  // Behaviors is a utility class that takes care of
-  // gluing your behavior instances to their given View.
-  // The most important part of this class is that you
-  // **MUST** override the class level behaviorsLookup
-  // method for things to work properly.
-  
-  Marionette.Behaviors = (function(Marionette, _) {
-    // Borrow event splitter from Backbone
-    var delegateEventSplitter = /^(\S+)\s*(.*)$/;
-  
-    function Behaviors(view, behaviors) {
-  
-      if (!_.isObject(view.behaviors)) {
-        return {};
-      }
-  
-      // Behaviors defined on a view can be a flat object literal
-      // or it can be a function that returns an object.
-      behaviors = Behaviors.parseBehaviors(view, behaviors || _.result(view, 'behaviors'));
-  
-      // Wraps several of the view's methods
-      // calling the methods first on each behavior
-      // and then eventually calling the method on the view.
-      Behaviors.wrap(view, behaviors, _.keys(methods));
-      return behaviors;
-    }
-  
-    var methods = {
-      behaviorTriggers: function(behaviorTriggers, behaviors) {
-        var triggerBuilder = new BehaviorTriggersBuilder(this, behaviors);
-        return triggerBuilder.buildBehaviorTriggers();
-      },
-  
-      behaviorEvents: function(behaviorEvents, behaviors) {
-        var _behaviorsEvents = {};
-  
-        _.each(behaviors, function(b, i) {
-          var _events = {};
-          var behaviorEvents = _.clone(_.result(b, 'events')) || {};
-  
-          // Normalize behavior events hash to allow
-          // a user to use the @ui. syntax.
-          behaviorEvents = Marionette.normalizeUIKeys(behaviorEvents, getBehaviorsUI(b));
-  
-          var j = 0;
-          _.each(behaviorEvents, function(behaviour, key) {
-            var match     = key.match(delegateEventSplitter);
-  
-            // Set event name to be namespaced using the view cid,
-            // the behavior index, and the behavior event index
-            // to generate a non colliding event namespace
-            // http://api.jquery.com/event.namespace/
-            var eventName = match[1] + '.' + [this.cid, i, j++, ' '].join('');
-            var selector  = match[2];
-  
-            var eventKey  = eventName + selector;
-            var handler   = _.isFunction(behaviour) ? behaviour : b[behaviour];
-  
-            _events[eventKey] = _.bind(handler, b);
-          }, this);
-  
-          _behaviorsEvents = _.extend(_behaviorsEvents, _events);
-        }, this);
-  
-        return _behaviorsEvents;
-      }
-    };
-  
-    _.extend(Behaviors, {
-  
-      // Placeholder method to be extended by the user.
-      // The method should define the object that stores the behaviors.
-      // i.e.
-      //
-      // ```js
-      // Marionette.Behaviors.behaviorsLookup: function() {
-      //   return App.Behaviors
-      // }
-      // ```
-      behaviorsLookup: function() {
-        throw new Marionette.Error({
-          message: 'You must define where your behaviors are stored.',
-          url: 'marionette.behaviors.html#behaviorslookup'
-        });
-      },
-  
-      // Takes care of getting the behavior class
-      // given options and a key.
-      // If a user passes in options.behaviorClass
-      // default to using that. Otherwise delegate
-      // the lookup to the users `behaviorsLookup` implementation.
-      getBehaviorClass: function(options, key) {
-        if (options.behaviorClass) {
-          return options.behaviorClass;
-        }
-  
-        // Get behavior class can be either a flat object or a method
-        return Marionette._getValue(Behaviors.behaviorsLookup, this, [options, key])[key];
-      },
-  
-      // Iterate over the behaviors object, for each behavior
-      // instantiate it and get its grouped behaviors.
-      parseBehaviors: function(view, behaviors) {
-        return _.chain(behaviors).map(function(options, key) {
-          var BehaviorClass = Behaviors.getBehaviorClass(options, key);
-  
-          var behavior = new BehaviorClass(options, view);
-          var nestedBehaviors = Behaviors.parseBehaviors(view, _.result(behavior, 'behaviors'));
-  
-          return [behavior].concat(nestedBehaviors);
-        }).flatten().value();
-      },
-  
-      // Wrap view internal methods so that they delegate to behaviors. For example,
-      // `onDestroy` should trigger destroy on all of the behaviors and then destroy itself.
-      // i.e.
-      //
-      // `view.delegateEvents = _.partial(methods.delegateEvents, view.delegateEvents, behaviors);`
-      wrap: function(view, behaviors, methodNames) {
-        _.each(methodNames, function(methodName) {
-          view[methodName] = _.partial(methods[methodName], view[methodName], behaviors);
-        });
-      }
-    });
-  
-    // Class to build handlers for `triggers` on behaviors
-    // for views
-    function BehaviorTriggersBuilder(view, behaviors) {
-      this._view      = view;
-      this._behaviors = behaviors;
-      this._triggers  = {};
-    }
-  
-    _.extend(BehaviorTriggersBuilder.prototype, {
-      // Main method to build the triggers hash with event keys and handlers
-      buildBehaviorTriggers: function() {
-        _.each(this._behaviors, this._buildTriggerHandlersForBehavior, this);
-        return this._triggers;
-      },
-  
-      // Internal method to build all trigger handlers for a given behavior
-      _buildTriggerHandlersForBehavior: function(behavior, i) {
-        var triggersHash = _.clone(_.result(behavior, 'triggers')) || {};
-  
-        triggersHash = Marionette.normalizeUIKeys(triggersHash, getBehaviorsUI(behavior));
-  
-        _.each(triggersHash, _.bind(this._setHandlerForBehavior, this, behavior, i));
-      },
-  
-      // Internal method to create and assign the trigger handler for a given
-      // behavior
-      _setHandlerForBehavior: function(behavior, i, eventName, trigger) {
-        // Unique identifier for the `this._triggers` hash
-        var triggerKey = trigger.replace(/^\S+/, function(triggerName) {
-          return triggerName + '.' + 'behaviortriggers' + i;
-        });
-  
-        this._triggers[triggerKey] = this._view._buildViewTrigger(eventName);
-      }
-    });
-  
-    function getBehaviorsUI(behavior) {
-      return behavior._uiBindings || behavior.ui;
-    }
-  
-    return Behaviors;
-  
-  })(Marionette, _);
-  
-
-  // App Router
-  // ----------
-  
-  // Reduce the boilerplate code of handling route events
-  // and then calling a single method on another object.
-  // Have your routers configured to call the method on
-  // your object, directly.
-  //
-  // Configure an AppRouter with `appRoutes`.
-  //
-  // App routers can only take one `controller` object.
-  // It is recommended that you divide your controller
-  // objects in to smaller pieces of related functionality
-  // and have multiple routers / controllers, instead of
-  // just one giant router and controller.
-  //
-  // You can also add standard routes to an AppRouter.
-  
-  Marionette.AppRouter = Backbone.Router.extend({
-  
-    constructor: function(options) {
-      this.options = options || {};
-  
-      Backbone.Router.apply(this, arguments);
-  
-      var appRoutes = this.getOption('appRoutes');
-      var controller = this._getController();
-      this.processAppRoutes(controller, appRoutes);
-      this.on('route', this._processOnRoute, this);
-    },
-  
-    // Similar to route method on a Backbone Router but
-    // method is called on the controller
-    appRoute: function(route, methodName) {
-      var controller = this._getController();
-      this._addAppRoute(controller, route, methodName);
-    },
-  
-    // process the route event and trigger the onRoute
-    // method call, if it exists
-    _processOnRoute: function(routeName, routeArgs) {
-      // make sure an onRoute before trying to call it
-      if (_.isFunction(this.onRoute)) {
-        // find the path that matches the current route
-        var routePath = _.invert(this.getOption('appRoutes'))[routeName];
-        this.onRoute(routeName, routePath, routeArgs);
-      }
-    },
-  
-    // Internal method to process the `appRoutes` for the
-    // router, and turn them in to routes that trigger the
-    // specified method on the specified `controller`.
-    processAppRoutes: function(controller, appRoutes) {
-      if (!appRoutes) { return; }
-  
-      var routeNames = _.keys(appRoutes).reverse(); // Backbone requires reverted order of routes
-  
-      _.each(routeNames, function(route) {
-        this._addAppRoute(controller, route, appRoutes[route]);
-      }, this);
-    },
-  
-    _getController: function() {
-      return this.getOption('controller');
-    },
-  
-    _addAppRoute: function(controller, route, methodName) {
-      var method = controller[methodName];
-  
-      if (!method) {
-        throw new Marionette.Error('Method "' + methodName + '" was not found on the controller');
-      }
-  
-      this.route(route, methodName, _.bind(method, controller));
-    },
-  
-    mergeOptions: Marionette.mergeOptions,
-  
-    // Proxy `getOption` to enable getting options from this or this.options by name.
-    getOption: Marionette.proxyGetOption,
-  
-    triggerMethod: Marionette.triggerMethod,
-  
-    bindEntityEvents: Marionette.proxyBindEntityEvents,
-  
-    unbindEntityEvents: Marionette.proxyUnbindEntityEvents
-  });
-  
-  // Application
-  // -----------
-  
-  // Contain and manage the composite application as a whole.
-  // Stores and starts up `Region` objects, includes an
-  // event aggregator as `app.vent`
-  Marionette.Application = Marionette.Object.extend({
-    constructor: function(options) {
-      this._initializeRegions(options);
-      this._initCallbacks = new Marionette.Callbacks();
-      this.submodules = {};
-      _.extend(this, options);
-      this._initChannel();
-      Marionette.Object.call(this, options);
-    },
-  
-    // Command execution, facilitated by Backbone.Wreqr.Commands
-    execute: function() {
-      this.commands.execute.apply(this.commands, arguments);
-    },
-  
-    // Request/response, facilitated by Backbone.Wreqr.RequestResponse
-    request: function() {
-      return this.reqres.request.apply(this.reqres, arguments);
-    },
-  
-    // Add an initializer that is either run at when the `start`
-    // method is called, or run immediately if added after `start`
-    // has already been called.
-    addInitializer: function(initializer) {
-      this._initCallbacks.add(initializer);
-    },
-  
-    // kick off all of the application's processes.
-    // initializes all of the regions that have been added
-    // to the app, and runs all of the initializer functions
-    start: function(options) {
-      this.triggerMethod('before:start', options);
-      this._initCallbacks.run(options, this);
-      this.triggerMethod('start', options);
-    },
-  
-    // Add regions to your app.
-    // Accepts a hash of named strings or Region objects
-    // addRegions({something: "#someRegion"})
-    // addRegions({something: Region.extend({el: "#someRegion"}) });
-    addRegions: function(regions) {
-      return this._regionManager.addRegions(regions);
-    },
-  
-    // Empty all regions in the app, without removing them
-    emptyRegions: function() {
-      return this._regionManager.emptyRegions();
-    },
-  
-    // Removes a region from your app, by name
-    // Accepts the regions name
-    // removeRegion('myRegion')
-    removeRegion: function(region) {
-      return this._regionManager.removeRegion(region);
-    },
-  
-    // Provides alternative access to regions
-    // Accepts the region name
-    // getRegion('main')
-    getRegion: function(region) {
-      return this._regionManager.get(region);
-    },
-  
-    // Get all the regions from the region manager
-    getRegions: function() {
-      return this._regionManager.getRegions();
-    },
-  
-    // Create a module, attached to the application
-    module: function(moduleNames, moduleDefinition) {
-  
-      // Overwrite the module class if the user specifies one
-      var ModuleClass = Marionette.Module.getClass(moduleDefinition);
-  
-      var args = _.toArray(arguments);
-      args.unshift(this);
-  
-      // see the Marionette.Module object for more information
-      return ModuleClass.create.apply(ModuleClass, args);
-    },
-  
-    // Enable easy overriding of the default `RegionManager`
-    // for customized region interactions and business-specific
-    // view logic for better control over single regions.
-    getRegionManager: function() {
-      return new Marionette.RegionManager();
-    },
-  
-    // Internal method to initialize the regions that have been defined in a
-    // `regions` attribute on the application instance
-    _initializeRegions: function(options) {
-      var regions = _.isFunction(this.regions) ? this.regions(options) : this.regions || {};
-  
-      this._initRegionManager();
-  
-      // Enable users to define `regions` in instance options.
-      var optionRegions = Marionette.getOption(options, 'regions');
-  
-      // Enable region options to be a function
-      if (_.isFunction(optionRegions)) {
-        optionRegions = optionRegions.call(this, options);
-      }
-  
-      // Overwrite current regions with those passed in options
-      _.extend(regions, optionRegions);
-  
-      this.addRegions(regions);
-  
-      return this;
-    },
-  
-    // Internal method to set up the region manager
-    _initRegionManager: function() {
-      this._regionManager = this.getRegionManager();
-      this._regionManager._parent = this;
-  
-      this.listenTo(this._regionManager, 'before:add:region', function() {
-        Marionette._triggerMethod(this, 'before:add:region', arguments);
-      });
-  
-      this.listenTo(this._regionManager, 'add:region', function(name, region) {
-        this[name] = region;
-        Marionette._triggerMethod(this, 'add:region', arguments);
-      });
-  
-      this.listenTo(this._regionManager, 'before:remove:region', function() {
-        Marionette._triggerMethod(this, 'before:remove:region', arguments);
-      });
-  
-      this.listenTo(this._regionManager, 'remove:region', function(name) {
-        delete this[name];
-        Marionette._triggerMethod(this, 'remove:region', arguments);
-      });
-    },
-  
-    // Internal method to setup the Wreqr.radio channel
-    _initChannel: function() {
-      this.channelName = _.result(this, 'channelName') || 'global';
-      this.channel = _.result(this, 'channel') || Backbone.Wreqr.radio.channel(this.channelName);
-      this.vent = _.result(this, 'vent') || this.channel.vent;
-      this.commands = _.result(this, 'commands') || this.channel.commands;
-      this.reqres = _.result(this, 'reqres') || this.channel.reqres;
-    }
-  });
-  
-  /* jshint maxparams: 9 */
-  
-  // Module
-  // ------
-  
-  // A simple module system, used to create privacy and encapsulation in
-  // Marionette applications
-  Marionette.Module = function(moduleName, app, options) {
-    this.moduleName = moduleName;
-    this.options = _.extend({}, this.options, options);
-    // Allow for a user to overide the initialize
-    // for a given module instance.
-    this.initialize = options.initialize || this.initialize;
-  
-    // Set up an internal store for sub-modules.
-    this.submodules = {};
-  
-    this._setupInitializersAndFinalizers();
-  
-    // Set an internal reference to the app
-    // within a module.
-    this.app = app;
-  
-    if (_.isFunction(this.initialize)) {
-      this.initialize(moduleName, app, this.options);
-    }
-  };
-  
-  Marionette.Module.extend = Marionette.extend;
-  
-  // Extend the Module prototype with events / listenTo, so that the module
-  // can be used as an event aggregator or pub/sub.
-  _.extend(Marionette.Module.prototype, Backbone.Events, {
-  
-    // By default modules start with their parents.
-    startWithParent: true,
-  
-    // Initialize is an empty function by default. Override it with your own
-    // initialization logic when extending Marionette.Module.
-    initialize: function() {},
-  
-    // Initializer for a specific module. Initializers are run when the
-    // module's `start` method is called.
-    addInitializer: function(callback) {
-      this._initializerCallbacks.add(callback);
-    },
-  
-    // Finalizers are run when a module is stopped. They are used to teardown
-    // and finalize any variables, references, events and other code that the
-    // module had set up.
-    addFinalizer: function(callback) {
-      this._finalizerCallbacks.add(callback);
-    },
-  
-    // Start the module, and run all of its initializers
-    start: function(options) {
-      // Prevent re-starting a module that is already started
-      if (this._isInitialized) { return; }
-  
-      // start the sub-modules (depth-first hierarchy)
-      _.each(this.submodules, function(mod) {
-        // check to see if we should start the sub-module with this parent
-        if (mod.startWithParent) {
-          mod.start(options);
-        }
-      });
-  
-      // run the callbacks to "start" the current module
-      this.triggerMethod('before:start', options);
-  
-      this._initializerCallbacks.run(options, this);
-      this._isInitialized = true;
-  
-      this.triggerMethod('start', options);
-    },
-  
-    // Stop this module by running its finalizers and then stop all of
-    // the sub-modules for this module
-    stop: function() {
-      // if we are not initialized, don't bother finalizing
-      if (!this._isInitialized) { return; }
-      this._isInitialized = false;
-  
-      this.triggerMethod('before:stop');
-  
-      // stop the sub-modules; depth-first, to make sure the
-      // sub-modules are stopped / finalized before parents
-      _.invoke(this.submodules, 'stop');
-  
-      // run the finalizers
-      this._finalizerCallbacks.run(undefined, this);
-  
-      // reset the initializers and finalizers
-      this._initializerCallbacks.reset();
-      this._finalizerCallbacks.reset();
-  
-      this.triggerMethod('stop');
-    },
-  
-    // Configure the module with a definition function and any custom args
-    // that are to be passed in to the definition function
-    addDefinition: function(moduleDefinition, customArgs) {
-      this._runModuleDefinition(moduleDefinition, customArgs);
-    },
-  
-    // Internal method: run the module definition function with the correct
-    // arguments
-    _runModuleDefinition: function(definition, customArgs) {
-      // If there is no definition short circut the method.
-      if (!definition) { return; }
-  
-      // build the correct list of arguments for the module definition
-      var args = _.flatten([
-        this,
-        this.app,
-        Backbone,
-        Marionette,
-        Backbone.$, _,
-        customArgs
-      ]);
-  
-      definition.apply(this, args);
-    },
-  
-    // Internal method: set up new copies of initializers and finalizers.
-    // Calling this method will wipe out all existing initializers and
-    // finalizers.
-    _setupInitializersAndFinalizers: function() {
-      this._initializerCallbacks = new Marionette.Callbacks();
-      this._finalizerCallbacks = new Marionette.Callbacks();
-    },
-  
-    // import the `triggerMethod` to trigger events with corresponding
-    // methods if the method exists
-    triggerMethod: Marionette.triggerMethod
-  });
-  
-  // Class methods to create modules
-  _.extend(Marionette.Module, {
-  
-    // Create a module, hanging off the app parameter as the parent object.
-    create: function(app, moduleNames, moduleDefinition) {
-      var module = app;
-  
-      // get the custom args passed in after the module definition and
-      // get rid of the module name and definition function
-      var customArgs = _.drop(arguments, 3);
-  
-      // Split the module names and get the number of submodules.
-      // i.e. an example module name of `Doge.Wow.Amaze` would
-      // then have the potential for 3 module definitions.
-      moduleNames = moduleNames.split('.');
-      var length = moduleNames.length;
-  
-      // store the module definition for the last module in the chain
-      var moduleDefinitions = [];
-      moduleDefinitions[length - 1] = moduleDefinition;
-  
-      // Loop through all the parts of the module definition
-      _.each(moduleNames, function(moduleName, i) {
-        var parentModule = module;
-        module = this._getModule(parentModule, moduleName, app, moduleDefinition);
-        this._addModuleDefinition(parentModule, module, moduleDefinitions[i], customArgs);
-      }, this);
-  
-      // Return the last module in the definition chain
-      return module;
-    },
-  
-    _getModule: function(parentModule, moduleName, app, def, args) {
-      var options = _.extend({}, def);
-      var ModuleClass = this.getClass(def);
-  
-      // Get an existing module of this name if we have one
-      var module = parentModule[moduleName];
-  
-      if (!module) {
-        // Create a new module if we don't have one
-        module = new ModuleClass(moduleName, app, options);
-        parentModule[moduleName] = module;
-        // store the module on the parent
-        parentModule.submodules[moduleName] = module;
-      }
-  
-      return module;
-    },
-  
-    // ## Module Classes
-    //
-    // Module classes can be used as an alternative to the define pattern.
-    // The extend function of a Module is identical to the extend functions
-    // on other Backbone and Marionette classes.
-    // This allows module lifecyle events like `onStart` and `onStop` to be called directly.
-    getClass: function(moduleDefinition) {
-      var ModuleClass = Marionette.Module;
-  
-      if (!moduleDefinition) {
-        return ModuleClass;
-      }
-  
-      // If all of the module's functionality is defined inside its class,
-      // then the class can be passed in directly. `MyApp.module("Foo", FooModule)`.
-      if (moduleDefinition.prototype instanceof ModuleClass) {
-        return moduleDefinition;
-      }
-  
-      return moduleDefinition.moduleClass || ModuleClass;
-    },
-  
-    // Add the module definition and add a startWithParent initializer function.
-    // This is complicated because module definitions are heavily overloaded
-    // and support an anonymous function, module class, or options object
-    _addModuleDefinition: function(parentModule, module, def, args) {
-      var fn = this._getDefine(def);
-      var startWithParent = this._getStartWithParent(def, module);
-  
-      if (fn) {
-        module.addDefinition(fn, args);
-      }
-  
-      this._addStartWithParent(parentModule, module, startWithParent);
-    },
-  
-    _getStartWithParent: function(def, module) {
-      var swp;
-  
-      if (_.isFunction(def) && (def.prototype instanceof Marionette.Module)) {
-        swp = module.constructor.prototype.startWithParent;
-        return _.isUndefined(swp) ? true : swp;
-      }
-  
-      if (_.isObject(def)) {
-        swp = def.startWithParent;
-        return _.isUndefined(swp) ? true : swp;
-      }
-  
-      return true;
-    },
-  
-    _getDefine: function(def) {
-      if (_.isFunction(def) && !(def.prototype instanceof Marionette.Module)) {
-        return def;
-      }
-  
-      if (_.isObject(def)) {
-        return def.define;
-      }
-  
-      return null;
-    },
-  
-    _addStartWithParent: function(parentModule, module, startWithParent) {
-      module.startWithParent = module.startWithParent && startWithParent;
-  
-      if (!module.startWithParent || !!module.startWithParentIsConfigured) {
-        return;
-      }
-  
-      module.startWithParentIsConfigured = true;
-  
-      parentModule.addInitializer(function(options) {
-        if (module.startWithParent) {
-          module.start(options);
-        }
-      });
-    }
-  });
-  
-
-  return Marionette;
-}));
-
-},{"backbone":"backbone","backbone.babysitter":144,"backbone.wreqr":148,"underscore":"underscore"}],146:[function(require,module,exports){
-// Backbone.Radio v1.0.2
-(function (global, factory) {
-  typeof exports === "object" && typeof module !== "undefined" ? module.exports = factory(require("underscore"), require("backbone")) : typeof define === "function" && define.amd ? define(["underscore", "backbone"], factory) : global.Backbone.Radio = factory(global._, global.Backbone);
-})(this, function (_, Backbone) {
-  "use strict";
-
-  var previousRadio = Backbone.Radio;
-
-  var Radio = Backbone.Radio = {};
-
-  Radio.VERSION = "1.0.2";
-
-  // This allows you to run multiple instances of Radio on the same
-  // webapp. After loading the new version, call `noConflict()` to
-  // get a reference to it. At the same time the old version will be
-  // returned to Backbone.Radio.
-  Radio.noConflict = function () {
-    Backbone.Radio = previousRadio;
-    return this;
-  };
-
-  // Whether or not we're in DEBUG mode or not. DEBUG mode helps you
-  // get around the issues of lack of warnings when events are mis-typed.
-  Radio.DEBUG = false;
-
-  // Format debug text.
-  Radio._debugText = function (warning, eventName, channelName) {
-    return warning + (channelName ? " on the " + channelName + " channel" : "") + ": \"" + eventName + "\"";
-  };
-
-  // This is the method that's called when an unregistered event was called.
-  // By default, it logs warning to the console. By overriding this you could
-  // make it throw an Error, for instance. This would make firing a nonexistent event
-  // have the same consequence as firing a nonexistent method on an Object.
-  Radio.debugLog = function (warning, eventName, channelName) {
-    if (Radio.DEBUG && console && console.warn) {
-      console.warn(Radio._debugText(warning, eventName, channelName));
-    }
-  };
-
-  var eventSplitter = /\s+/;
-
-  // An internal method used to handle Radio's method overloading for Requests.
-  // It's borrowed from Backbone.Events. It differs from Backbone's overload
-  // API (which is used in Backbone.Events) in that it doesn't support space-separated
-  // event names.
-  Radio._eventsApi = function (obj, action, name, rest) {
-    if (!name) {
-      return false;
-    }
-
-    var results = {};
-
-    // Handle event maps.
-    if (typeof name === "object") {
-      for (var key in name) {
-        var result = obj[action].apply(obj, [key, name[key]].concat(rest));
-        eventSplitter.test(key) ? _.extend(results, result) : results[key] = result;
-      }
-      return results;
-    }
-
-    // Handle space separated event names.
-    if (eventSplitter.test(name)) {
-      var names = name.split(eventSplitter);
-      for (var i = 0, l = names.length; i < l; i++) {
-        results[names[i]] = obj[action].apply(obj, [names[i]].concat(rest));
-      }
-      return results;
-    }
-
-    return false;
-  };
-
-  // An optimized way to execute callbacks.
-  Radio._callHandler = function (callback, context, args) {
-    var a1 = args[0],
-        a2 = args[1],
-        a3 = args[2];
-    switch (args.length) {
-      case 0:
-        return callback.call(context);
-      case 1:
-        return callback.call(context, a1);
-      case 2:
-        return callback.call(context, a1, a2);
-      case 3:
-        return callback.call(context, a1, a2, a3);
-      default:
-        return callback.apply(context, args);
-    }
-  };
-
-  // A helper used by `off` methods to the handler from the store
-  function removeHandler(store, name, callback, context) {
-    var event = store[name];
-    if ((!callback || (callback === event.callback || callback === event.callback._callback)) && (!context || context === event.context)) {
-      delete store[name];
-      return true;
-    }
-  }
-
-  function removeHandlers(store, name, callback, context) {
-    store || (store = {});
-    var names = name ? [name] : _.keys(store);
-    var matched = false;
-
-    for (var i = 0, length = names.length; i < length; i++) {
-      name = names[i];
-
-      // If there's no event by this name, log it and continue
-      // with the loop
-      if (!store[name]) {
-        continue;
-      }
-
-      if (removeHandler(store, name, callback, context)) {
-        matched = true;
-      }
-    }
-
-    return matched;
-  }
-
-  /*
-   * tune-in
-   * -------
-   * Get console logs of a channel's activity
-   *
-   */
-
-  var _logs = {};
-
-  // This is to produce an identical function in both tuneIn and tuneOut,
-  // so that Backbone.Events unregisters it.
-  function _partial(channelName) {
-    return _logs[channelName] || (_logs[channelName] = _.partial(Radio.log, channelName));
-  }
-
-  _.extend(Radio, {
-
-    // Log information about the channel and event
-    log: function log(channelName, eventName) {
-      var args = _.rest(arguments, 2);
-      console.log("[" + channelName + "] \"" + eventName + "\"", args);
-    },
-
-    // Logs all events on this channel to the console. It sets an
-    // internal value on the channel telling it we're listening,
-    // then sets a listener on the Backbone.Events
-    tuneIn: function tuneIn(channelName) {
-      var channel = Radio.channel(channelName);
-      channel._tunedIn = true;
-      channel.on("all", _partial(channelName));
-      return this;
-    },
-
-    // Stop logging all of the activities on this channel to the console
-    tuneOut: function tuneOut(channelName) {
-      var channel = Radio.channel(channelName);
-      channel._tunedIn = false;
-      channel.off("all", _partial(channelName));
-      delete _logs[channelName];
-      return this;
-    }
-  });
-
-  /*
-   * Backbone.Radio.Requests
-   * -----------------------
-   * A messaging system for requesting data.
-   *
-   */
-
-  function makeCallback(callback) {
-    return _.isFunction(callback) ? callback : function () {
-      return callback;
-    };
-  }
-
-  Radio.Requests = {
-
-    // Make a request
-    request: function request(name) {
-      var args = _.rest(arguments);
-      var results = Radio._eventsApi(this, "request", name, args);
-      if (results) {
-        return results;
-      }
-      var channelName = this.channelName;
-      var requests = this._requests;
-
-      // Check if we should log the request, and if so, do it
-      if (channelName && this._tunedIn) {
-        Radio.log.apply(this, [channelName, name].concat(args));
-      }
-
-      // If the request isn't handled, log it in DEBUG mode and exit
-      if (requests && (requests[name] || requests["default"])) {
-        var handler = requests[name] || requests["default"];
-        args = requests[name] ? args : arguments;
-        return Radio._callHandler(handler.callback, handler.context, args);
-      } else {
-        Radio.debugLog("An unhandled request was fired", name, channelName);
-      }
-    },
-
-    // Set up a handler for a request
-    reply: function reply(name, callback, context) {
-      if (Radio._eventsApi(this, "reply", name, [callback, context])) {
-        return this;
-      }
-
-      this._requests || (this._requests = {});
-
-      if (this._requests[name]) {
-        Radio.debugLog("A request was overwritten", name, this.channelName);
-      }
-
-      this._requests[name] = {
-        callback: makeCallback(callback),
-        context: context || this
-      };
-
-      return this;
-    },
-
-    // Set up a handler that can only be requested once
-    replyOnce: function replyOnce(name, callback, context) {
-      if (Radio._eventsApi(this, "replyOnce", name, [callback, context])) {
-        return this;
-      }
-
-      var self = this;
-
-      var once = _.once(function () {
-        self.stopReplying(name);
-        return makeCallback(callback).apply(this, arguments);
-      });
-
-      return this.reply(name, once, context);
-    },
-
-    // Remove handler(s)
-    stopReplying: function stopReplying(name, callback, context) {
-      if (Radio._eventsApi(this, "stopReplying", name)) {
-        return this;
-      }
-
-      // Remove everything if there are no arguments passed
-      if (!name && !callback && !context) {
-        delete this._requests;
-      } else if (!removeHandlers(this._requests, name, callback, context)) {
-        Radio.debugLog("Attempted to remove the unregistered request", name, this.channelName);
-      }
-
-      return this;
-    }
-  };
-
-  /*
-   * Backbone.Radio.channel
-   * ----------------------
-   * Get a reference to a channel by name.
-   *
-   */
-
-  Radio._channels = {};
-
-  Radio.channel = function (channelName) {
-    if (!channelName) {
-      throw new Error("You must provide a name for the channel.");
-    }
-
-    if (Radio._channels[channelName]) {
-      return Radio._channels[channelName];
-    } else {
-      return Radio._channels[channelName] = new Radio.Channel(channelName);
-    }
-  };
-
-  /*
-   * Backbone.Radio.Channel
-   * ----------------------
-   * A Channel is an object that extends from Backbone.Events,
-   * and Radio.Requests.
-   *
-   */
-
-  Radio.Channel = function (channelName) {
-    this.channelName = channelName;
-  };
-
-  _.extend(Radio.Channel.prototype, Backbone.Events, Radio.Requests, {
-
-    // Remove all handlers from the messaging systems of this channel
-    reset: function reset() {
-      this.off();
-      this.stopListening();
-      this.stopReplying();
-      return this;
-    }
-  });
-
-  /*
-   * Top-level API
-   * -------------
-   * Supplies the 'top-level API' for working with Channels directly
-   * from Backbone.Radio.
-   *
-   */
-
-  var channel,
-      args,
-      systems = [Backbone.Events, Radio.Commands, Radio.Requests];
-
-  _.each(systems, function (system) {
-    _.each(system, function (method, methodName) {
-      Radio[methodName] = function (channelName) {
-        args = _.rest(arguments);
-        channel = this.channel(channelName);
-        return channel[methodName].apply(channel, args);
-      };
-    });
-  });
-
-  Radio.reset = function (channelName) {
-    var channels = !channelName ? this._channels : [this._channels[channelName]];
-    _.invoke(channels, "reset");
-  };
-
-  var backbone_radio = Radio;
-
-  return backbone_radio;
-});
-//# sourceMappingURL=./backbone.radio.js.map
-},{"backbone":"backbone","underscore":"underscore"}],147:[function(require,module,exports){
-// Backbone.Stickit v0.9.2, MIT Licensed
-// Copyright (c) 2012-2015 The New York Times, CMS Group, Matthew DeLambo <delambo@gmail.com>
-
-(function (factory) {
-
-  // Set up Stickit appropriately for the environment. Start with AMD.
-  if (typeof define === 'function' && define.amd)
-    define(['underscore', 'backbone', 'exports'], factory);
-
-  // Next for Node.js or CommonJS.
-  else if (typeof exports === 'object')
-    factory(require('underscore'), require('backbone'), exports);
-
-  // Finally, as a browser global.
-  else
-    factory(_, Backbone, {});
-
-}(function (_, Backbone, Stickit) {
-
-  // Stickit Namespace
-  // --------------------------
-
-  // Export onto Backbone object
-  Backbone.Stickit = Stickit;
-
-  Stickit._handlers = [];
-
-  Stickit.addHandler = function(handlers) {
-    // Fill-in default values.
-    handlers = _.map(_.flatten([handlers]), function(handler) {
-      return _.defaults({}, handler, {
-        updateModel: true,
-        updateView: true,
-        updateMethod: 'text'
-      });
-    });
-    this._handlers = this._handlers.concat(handlers);
-  };
-
-  // Backbone.View Mixins
-  // --------------------
-
-  Stickit.ViewMixin = {
-
-    // Collection of model event bindings.
-    //   [{model,event,fn,config}, ...]
-    _modelBindings: null,
-
-    // Unbind the model and event bindings from `this._modelBindings` and
-    // `this.$el`. If the optional `model` parameter is defined, then only
-    // delete bindings for the given `model` and its corresponding view events.
-    unstickit: function(model, bindingSelector) {
-
-      // Support passing a bindings hash in place of bindingSelector.
-      if (_.isObject(bindingSelector)) {
-        _.each(bindingSelector, function(v, selector) {
-          this.unstickit(model, selector);
-        }, this);
-        return;
-      }
-
-      var models = [], destroyFns = [];
-      this._modelBindings = _.reject(this._modelBindings, function(binding) {
-        if (model && binding.model !== model) return;
-        if (bindingSelector && binding.config.selector != bindingSelector) return;
-
-        binding.model.off(binding.event, binding.fn);
-        destroyFns.push(binding.config._destroy);
-        models.push(binding.model);
-        return true;
-      });
-
-      // Trigger an event for each model that was unbound.
-      _.invoke(_.uniq(models), 'trigger', 'stickit:unstuck', this.cid);
-
-      // Call `_destroy` on a unique list of the binding callbacks.
-      _.each(_.uniq(destroyFns), function(fn) { fn.call(this); }, this);
-
-      this.$el.off('.stickit' + (model ? '.' + model.cid : ''), bindingSelector);
-    },
-
-    // Initilize Stickit bindings for the view. Subsequent binding additions
-    // can either call `stickit` with the new bindings, or add them directly
-    // with `addBinding`. Both arguments to `stickit` are optional.
-    stickit: function(optionalModel, optionalBindingsConfig) {
-      var model = optionalModel || this.model,
-          bindings = optionalBindingsConfig || _.result(this, "bindings") || {};
-
-      this._modelBindings || (this._modelBindings = []);
-
-      // Add bindings in bulk using `addBinding`.
-      this.addBinding(model, bindings);
-
-      // Wrap `view.remove` to unbind stickit model and dom events.
-      var remove = this.remove;
-      if (!remove.stickitWrapped) {
-        this.remove = function() {
-          var ret = this;
-          this.unstickit();
-          if (remove) ret = remove.apply(this, arguments);
-          return ret;
-        };
-      }
-      this.remove.stickitWrapped = true;
-      return this;
-    },
-
-    // Add a single Stickit binding or a hash of bindings to the model. If
-    // `optionalModel` is ommitted, will default to the view's `model` property.
-    addBinding: function(optionalModel, selector, binding) {
-      var model = optionalModel || this.model,
-          namespace = '.stickit.' + model.cid;
-
-      binding = binding || {};
-
-      // Support jQuery-style {key: val} event maps.
-      if (_.isObject(selector)) {
-        var bindings = selector;
-        _.each(bindings, function(val, key) {
-          this.addBinding(model, key, val);
-        }, this);
-        return;
-      }
-
-      // Special case the ':el' selector to use the view's this.$el.
-      var $el = selector === ':el' ? this.$el : this.$(selector);
-
-      // Clear any previous matching bindings.
-      this.unstickit(model, selector);
-
-      // Fail fast if the selector didn't match an element.
-      if (!$el.length) return;
-
-      // Allow shorthand setting of model attributes - `'selector':'observe'`.
-      if (_.isString(binding)) binding = {observe: binding};
-
-      // Handle case where `observe` is in the form of a function.
-      if (_.isFunction(binding.observe)) binding.observe = binding.observe.call(this);
-
-      // Find all matching Stickit handlers that could apply to this element
-      // and store in a config object.
-      var config = getConfiguration($el, binding);
-
-      // The attribute we're observing in our config.
-      var modelAttr = config.observe;
-
-      // Store needed properties for later.
-      config.selector = selector;
-      config.view = this;
-
-      // Create the model set options with a unique `bindId` so that we
-      // can avoid double-binding in the `change:attribute` event handler.
-      var bindId = config.bindId = _.uniqueId();
-
-      // Add a reference to the view for handlers of stickitChange events
-      var options = _.extend({stickitChange: config}, config.setOptions);
-
-      // Add a `_destroy` callback to the configuration, in case `destroy`
-      // is a named function and we need a unique function when unsticking.
-      config._destroy = function() {
-        applyViewFn.call(this, config.destroy, $el, model, config);
-      };
-
-      initializeAttributes($el, config, model, modelAttr);
-      initializeVisible($el, config, model, modelAttr);
-      initializeClasses($el, config, model, modelAttr);
-
-      if (modelAttr) {
-        // Setup one-way (input element -> model) bindings.
-        _.each(config.events, function(type) {
-          var eventName = type + namespace;
-          var listener = function(event) {
-            var val = applyViewFn.call(this, config.getVal, $el, event, config, slice.call(arguments, 1));
-
-            // Don't update the model if false is returned from the `updateModel` configuration.
-            var currentVal = evaluateBoolean(config.updateModel, val, event, config);
-            if (currentVal) setAttr(model, modelAttr, val, options, config);
-          };
-          var sel = selector === ':el'? '' : selector;
-          this.$el.on(eventName, sel, _.bind(listener, this));
-        }, this);
-
-        // Setup a `change:modelAttr` observer to keep the view element in sync.
-        // `modelAttr` may be an array of attributes or a single string value.
-        _.each(_.flatten([modelAttr]), function(attr) {
-          observeModelEvent(model, 'change:' + attr, config, function(m, val, options) {
-            var changeId = options && options.stickitChange && options.stickitChange.bindId;
-            if (changeId !== bindId) {
-              var currentVal = getAttr(model, modelAttr, config);
-              updateViewBindEl($el, config, currentVal, model);
-            }
-          });
-        });
-
-        var currentVal = getAttr(model, modelAttr, config);
-        updateViewBindEl($el, config, currentVal, model, true);
-      }
-
-      // After each binding is setup, call the `initialize` callback.
-      applyViewFn.call(this, config.initialize, $el, model, config);
-    }
-  };
-
-  _.extend(Backbone.View.prototype, Stickit.ViewMixin);
-
-  // Helpers
-  // -------
-
-  var slice = [].slice;
-
-  // Evaluates the given `path` (in object/dot-notation) relative to the given
-  // `obj`. If the path is null/undefined, then the given `obj` is returned.
-  var evaluatePath = function(obj, path) {
-    var parts = (path || '').split('.');
-    var result = _.reduce(parts, function(memo, i) { return memo[i]; }, obj);
-    return result == null ? obj : result;
-  };
-
-  // If the given `fn` is a string, then view[fn] is called, otherwise it is
-  // a function that should be executed.
-  var applyViewFn = function(fn) {
-    fn = _.isString(fn) ? evaluatePath(this, fn) : fn;
-    if (fn) return (fn).apply(this, slice.call(arguments, 1));
-  };
-
-  // Given a function, string (view function reference), or a boolean
-  // value, returns the truthy result. Any other types evaluate as false.
-  // The first argument must be `reference` and the last must be `config`, but
-  // middle arguments can be variadic.
-  var evaluateBoolean = function(reference, val, config) {
-    if (_.isBoolean(reference)) {
-      return reference;
-    } else if (_.isFunction(reference) || _.isString(reference)) {
-      var view = _.last(arguments).view;
-      return applyViewFn.apply(view, arguments);
-    }
-    return false;
-  };
-
-  // Setup a model event binding with the given function, and track the event
-  // in the view's _modelBindings.
-  var observeModelEvent = function(model, event, config, fn) {
-    var view = config.view;
-    model.on(event, fn, view);
-    view._modelBindings.push({model:model, event:event, fn:fn, config:config});
-  };
-
-  // Prepares the given `val`ue and sets it into the `model`.
-  var setAttr = function(model, attr, val, options, config) {
-    var value = {}, view = config.view;
-    if (config.onSet) {
-      val = applyViewFn.call(view, config.onSet, val, config);
-    }
-
-    if (config.set) {
-      applyViewFn.call(view, config.set, attr, val, options, config);
-    } else {
-      value[attr] = val;
-      // If `observe` is defined as an array and `onSet` returned
-      // an array, then map attributes to their values.
-      if (_.isArray(attr) && _.isArray(val)) {
-        value = _.reduce(attr, function(memo, attribute, index) {
-          memo[attribute] = _.has(val, index) ? val[index] : null;
-          return memo;
-        }, {});
-      }
-      model.set(value, options);
-    }
-  };
-
-  // Returns the given `attr`'s value from the `model`, escaping and
-  // formatting if necessary. If `attr` is an array, then an array of
-  // respective values will be returned.
-  var getAttr = function(model, attr, config) {
-    var view = config.view;
-    var retrieveVal = function(field) {
-      return model[config.escape ? 'escape' : 'get'](field);
-    };
-    var sanitizeVal = function(val) {
-      return val == null ? '' : val;
-    };
-    var val = _.isArray(attr) ? _.map(attr, retrieveVal) : retrieveVal(attr);
-    if (config.onGet) val = applyViewFn.call(view, config.onGet, val, config);
-    return _.isArray(val) ? _.map(val, sanitizeVal) : sanitizeVal(val);
-  };
-
-  // Find handlers in `Backbone.Stickit._handlers` with selectors that match
-  // `$el` and generate a configuration by mixing them in the order that they
-  // were found with the given `binding`.
-  var getConfiguration = Stickit.getConfiguration = function($el, binding) {
-    var handlers = [{
-      updateModel: false,
-      updateMethod: 'text',
-      update: function($el, val, m, opts) { if ($el[opts.updateMethod]) $el[opts.updateMethod](val); },
-      getVal: function($el, e, opts) { return $el[opts.updateMethod](); }
-    }];
-    handlers = handlers.concat(_.filter(Stickit._handlers, function(handler) {
-      return $el.is(handler.selector);
-    }));
-    handlers.push(binding);
-
-    // Merge handlers into a single config object. Last props in wins.
-    var config = _.extend.apply(_, handlers);
-
-    // `updateView` is defaulted to false for configutrations with
-    // `visible`; otherwise, `updateView` is defaulted to true.
-    if (!_.has(config, 'updateView')) config.updateView = !config.visible;
-    return config;
-  };
-
-  // Setup the attributes configuration - a list that maps an attribute or
-  // property `name`, to an `observe`d model attribute, using an optional
-  // `onGet` formatter.
-  //
-  //     attributes: [{
-  //       name: 'attributeOrPropertyName',
-  //       observe: 'modelAttrName'
-  //       onGet: function(modelAttrVal, modelAttrName) { ... }
-  //     }, ...]
-  //
-  var initializeAttributes = function($el, config, model, modelAttr) {
-    var props = ['autofocus', 'autoplay', 'async', 'checked', 'controls',
-      'defer', 'disabled', 'hidden', 'indeterminate', 'loop', 'multiple',
-      'open', 'readonly', 'required', 'scoped', 'selected'];
-
-    var view = config.view;
-
-    _.each(config.attributes || [], function(attrConfig) {
-      attrConfig = _.clone(attrConfig);
-      attrConfig.view = view;
-
-      var lastClass = '';
-      var observed = attrConfig.observe || (attrConfig.observe = modelAttr);
-      var updateAttr = function() {
-        var updateType = _.contains(props, attrConfig.name) ? 'prop' : 'attr',
-            val = getAttr(model, observed, attrConfig);
-
-        // If it is a class then we need to remove the last value and add the new.
-        if (attrConfig.name === 'class') {
-          $el.removeClass(lastClass).addClass(val);
-          lastClass = val;
-        } else {
-          $el[updateType](attrConfig.name, val);
-        }
-      };
-
-      _.each(_.flatten([observed]), function(attr) {
-        observeModelEvent(model, 'change:' + attr, config, updateAttr);
-      });
-
-      // Initialize the matched element's state.
-      updateAttr();
-    });
-  };
-
-  var initializeClasses = function($el, config, model, modelAttr) {
-    _.each(config.classes || [], function(classConfig, name) {
-      if (_.isString(classConfig)) classConfig = {observe: classConfig};
-      classConfig.view = config.view;
-
-      var observed = classConfig.observe;
-      var updateClass = function() {
-        var val = getAttr(model, observed, classConfig);
-        $el.toggleClass(name, !!val);
-      };
-
-      _.each(_.flatten([observed]), function(attr) {
-        observeModelEvent(model, 'change:' + attr, config, updateClass);
-      });
-      updateClass();
-    });
-  };
-
-  // If `visible` is configured, then the view element will be shown/hidden
-  // based on the truthiness of the modelattr's value or the result of the
-  // given callback. If a `visibleFn` is also supplied, then that callback
-  // will be executed to manually handle showing/hiding the view element.
-  //
-  //     observe: 'isRight',
-  //     visible: true, // or function(val, options) {}
-  //     visibleFn: function($el, isVisible, options) {} // optional handler
-  //
-  var initializeVisible = function($el, config, model, modelAttr) {
-    if (config.visible == null) return;
-    var view = config.view;
-
-    var visibleCb = function() {
-      var visible = config.visible,
-          visibleFn = config.visibleFn,
-          val = getAttr(model, modelAttr, config),
-          isVisible = !!val;
-
-      // If `visible` is a function then it should return a boolean result to show/hide.
-      if (_.isFunction(visible) || _.isString(visible)) {
-        isVisible = !!applyViewFn.call(view, visible, val, config);
-      }
-
-      // Either use the custom `visibleFn`, if provided, or execute the standard show/hide.
-      if (visibleFn) {
-        applyViewFn.call(view, visibleFn, $el, isVisible, config);
-      } else {
-        $el.toggle(isVisible);
-      }
-    };
-
-    _.each(_.flatten([modelAttr]), function(attr) {
-      observeModelEvent(model, 'change:' + attr, config, visibleCb);
-    });
-
-    visibleCb();
-  };
-
-  // Update the value of `$el` using the given configuration and trigger the
-  // `afterUpdate` callback. This action may be blocked by `config.updateView`.
-  //
-  //     update: function($el, val, model, options) {},  // handler for updating
-  //     updateView: true, // defaults to true
-  //     afterUpdate: function($el, val, options) {} // optional callback
-  //
-  var updateViewBindEl = function($el, config, val, model, isInitializing) {
-    var view = config.view;
-    if (!evaluateBoolean(config.updateView, val, config)) return;
-    applyViewFn.call(view, config.update, $el, val, model, config);
-    if (!isInitializing) applyViewFn.call(view, config.afterUpdate, $el, val, config);
-  };
-
-  // Default Handlers
-  // ----------------
-
-  Stickit.addHandler([{
-    selector: '[contenteditable]',
-    updateMethod: 'html',
-    events: ['input', 'change']
-  }, {
-    selector: 'input',
-    events: ['propertychange', 'input', 'change'],
-    update: function($el, val) { $el.val(val); },
-    getVal: function($el) {
-      return $el.val();
-    }
-  }, {
-    selector: 'textarea',
-    events: ['propertychange', 'input', 'change'],
-    update: function($el, val) { $el.val(val); },
-    getVal: function($el) { return $el.val(); }
-  }, {
-    selector: 'input[type="radio"]',
-    events: ['change'],
-    update: function($el, val) {
-      $el.filter('[value="'+val+'"]').prop('checked', true);
-    },
-    getVal: function($el) {
-      return $el.filter(':checked').val();
-    }
-  }, {
-    selector: 'input[type="checkbox"]',
-    events: ['change'],
-    update: function($el, val, model, options) {
-      if ($el.length > 1) {
-        // There are multiple checkboxes so we need to go through them and check
-        // any that have value attributes that match what's in the array of `val`s.
-        val || (val = []);
-        $el.each(function(i, el) {
-          var checkbox = Backbone.$(el);
-          var checked = _.contains(val, checkbox.val());
-          checkbox.prop('checked', checked);
-        });
-      } else {
-        var checked = _.isBoolean(val) ? val : val === $el.val();
-        $el.prop('checked', checked);
-      }
-    },
-    getVal: function($el) {
-      var val;
-      if ($el.length > 1) {
-        val = _.reduce($el, function(memo, el) {
-          var checkbox = Backbone.$(el);
-          if (checkbox.prop('checked')) memo.push(checkbox.val());
-          return memo;
-        }, []);
-      } else {
-        val = $el.prop('checked');
-        // If the checkbox has a value attribute defined, then
-        // use that value. Most browsers use "on" as a default.
-        var boxval = $el.val();
-        if (boxval !== 'on' && boxval != null) {
-          val = val ? $el.val() : null;
-        }
-      }
-      return val;
-    }
-  }, {
-    selector: 'select',
-    events: ['change'],
-    update: function($el, val, model, options) {
-      var optList,
-        selectConfig = options.selectOptions,
-        list = selectConfig && selectConfig.collection || undefined,
-        isMultiple = $el.prop('multiple');
-
-      // If there are no `selectOptions` then we assume that the `<select>`
-      // is pre-rendered and that we need to generate the collection.
-      if (!selectConfig) {
-        selectConfig = {};
-        var getList = function($el) {
-          return $el.map(function(index, option) {
-            // Retrieve the text and value of the option, preferring "stickit-bind-val"
-            // data attribute over value property.
-            var dataVal = Backbone.$(option).data('stickit-bind-val');
-            return {
-              value: dataVal !== undefined ? dataVal : option.value,
-              label: option.text
-            };
-          }).get();
-        };
-        if ($el.find('optgroup').length) {
-          list = {opt_labels:[]};
-          // Search for options without optgroup
-          if ($el.find('> option').length) {
-            list.opt_labels.push(undefined);
-            _.each($el.find('> option'), function(el) {
-              list[undefined] = getList(Backbone.$(el));
-            });
-          }
-          _.each($el.find('optgroup'), function(el) {
-            var label = Backbone.$(el).attr('label');
-            list.opt_labels.push(label);
-            list[label] = getList(Backbone.$(el).find('option'));
-          });
-        } else {
-          list = getList($el.find('option'));
-        }
-      }
-
-      // Fill in default label and path values.
-      selectConfig.valuePath = selectConfig.valuePath || 'value';
-      selectConfig.labelPath = selectConfig.labelPath || 'label';
-      selectConfig.disabledPath = selectConfig.disabledPath || 'disabled';
-
-      var addSelectOptions = function(optList, $el, fieldVal) {
-        _.each(optList, function(obj) {
-          var option = Backbone.$('<option/>'), optionVal = obj;
-
-          var fillOption = function(text, val, disabled) {
-            option.text(text);
-            optionVal = val;
-            // Save the option value as data so that we can reference it later.
-            option.data('stickit-bind-val', optionVal);
-            if (!_.isArray(optionVal) && !_.isObject(optionVal)) option.val(optionVal);
-
-            if (disabled === true) option.prop('disabled', 'disabled');
-          };
-
-          var text, val, disabled;
-          if (obj === '__default__') {
-            text = fieldVal.label,
-            val = fieldVal.value,
-            disabled = fieldVal.disabled;
-          } else {
-            text = evaluatePath(obj, selectConfig.labelPath),
-            val = evaluatePath(obj, selectConfig.valuePath),
-            disabled = evaluatePath(obj, selectConfig.disabledPath);
-          }
-          fillOption(text, val, disabled);
-
-          // Determine if this option is selected.
-          var isSelected = function() {
-            if (!isMultiple && optionVal != null && fieldVal != null && optionVal === fieldVal) {
-              return true;
-            } else if (_.isObject(fieldVal) && _.isEqual(optionVal, fieldVal)) {
-              return true;
-            }
-            return false;
-          };
-
-          if (isSelected()) {
-            option.prop('selected', true);
-          } else if (isMultiple && _.isArray(fieldVal)) {
-            _.each(fieldVal, function(val) {
-              if (_.isObject(val)) val = evaluatePath(val, selectConfig.valuePath);
-              if (val === optionVal || (_.isObject(val) && _.isEqual(optionVal, val)))
-                option.prop('selected', true);
-            });
-          }
-
-          $el.append(option);
-        });
-      };
-
-      $el.find('*').remove();
-
-      // The `list` configuration is a function that returns the options list or a string
-      // which represents the path to the list relative to `window` or the view/`this`.
-      if (_.isString(list)) {
-        var context = window;
-        if (list.indexOf('this.') === 0) context = this;
-        list = list.replace(/^[a-z]*\.(.+)$/, '$1');
-        optList = evaluatePath(context, list);
-      } else if (_.isFunction(list)) {
-        optList = applyViewFn.call(this, list, $el, options);
-      } else {
-        optList = list;
-      }
-
-      // Support Backbone.Collection and deserialize.
-      if (optList instanceof Backbone.Collection) {
-        var collection = optList;
-        var refreshSelectOptions = function() {
-          var currentVal = getAttr(model, options.observe, options);
-          applyViewFn.call(this, options.update, $el, currentVal, model, options);
-        };
-        // We need to call this function after unstickit and after an update so we don't end up
-        // with multiple listeners doing the same thing
-        var removeCollectionListeners = function() {
-          collection.off('add remove reset sort', refreshSelectOptions);
-        };
-        var removeAllListeners = function() {
-          removeCollectionListeners();
-          collection.off('stickit:selectRefresh');
-          model.off('stickit:selectRefresh');
-        };
-        // Remove previously set event listeners by triggering a custom event
-        collection.trigger('stickit:selectRefresh');
-        collection.once('stickit:selectRefresh', removeCollectionListeners, this);
-
-        // Listen to the collection and trigger an update of the select options
-        collection.on('add remove reset sort', refreshSelectOptions, this);
-
-        // Remove the previous model event listener
-        model.trigger('stickit:selectRefresh');
-        model.once('stickit:selectRefresh', function() {
-          model.off('stickit:unstuck', removeAllListeners);
-        });
-        // Remove collection event listeners once this binding is unstuck
-        model.once('stickit:unstuck', removeAllListeners, this);
-        optList = optList.toJSON();
-      }
-
-      if (selectConfig.defaultOption) {
-        var option = _.isFunction(selectConfig.defaultOption) ?
-          selectConfig.defaultOption.call(this, $el, options) :
-          selectConfig.defaultOption;
-        addSelectOptions(["__default__"], $el, option);
-      }
-
-      if (_.isArray(optList)) {
-        addSelectOptions(optList, $el, val);
-      } else if (optList.opt_labels) {
-        // To define a select with optgroups, format selectOptions.collection as an object
-        // with an 'opt_labels' property, as in the following:
-        //
-        //     {
-        //       'opt_labels': ['Looney Tunes', 'Three Stooges'],
-        //       'Looney Tunes': [{id: 1, name: 'Bugs Bunny'}, {id: 2, name: 'Donald Duck'}],
-        //       'Three Stooges': [{id: 3, name : 'moe'}, {id: 4, name : 'larry'}, {id: 5, name : 'curly'}]
-        //     }
-        //
-        _.each(optList.opt_labels, function(label) {
-          var $group = Backbone.$('<optgroup/>').attr('label', label);
-          addSelectOptions(optList[label], $group, val);
-          $el.append($group);
-        });
-        // With no 'opt_labels' parameter, the object is assumed to be a simple value-label map.
-        // Pass a selectOptions.comparator to override the default order of alphabetical by label.
-      } else {
-        var opts = [], opt;
-        for (var i in optList) {
-          opt = {};
-          opt[selectConfig.valuePath] = i;
-          opt[selectConfig.labelPath] = optList[i];
-          opts.push(opt);
-        }
-        opts = _.sortBy(opts, selectConfig.comparator || selectConfig.labelPath);
-        addSelectOptions(opts, $el, val);
-      }
-    },
-    getVal: function($el) {
-      var selected = $el.find('option:selected');
-
-      if ($el.prop('multiple')) {
-        return _.map(selected, function(el) {
-          return Backbone.$(el).data('stickit-bind-val');
-        });
-      } else {
-        return selected.data('stickit-bind-val');
-      }
-    }
-  }]);
-
-  return Stickit;
-
-}));
-
-},{"backbone":"backbone","underscore":"underscore"}],148:[function(require,module,exports){
-
-},{}],149:[function(require,module,exports){
+},{}],118:[function(require,module,exports){
 //! moment.js
-//! version : 2.10.2
+//! version : 2.10.6
 //! authors : Tim Wood, Iskren Chernev, Moment.js contributors
 //! license : MIT
 //! momentjs.com
@@ -15330,28 +9241,12 @@ String.prototype.score = function (word, fuzziness) {
         hookCallback = callback;
     }
 
-    function defaultParsingFlags() {
-        // We need to deep clone this object.
-        return {
-            empty           : false,
-            unusedTokens    : [],
-            unusedInput     : [],
-            overflow        : -2,
-            charsLeftOver   : 0,
-            nullInput       : false,
-            invalidMonth    : null,
-            invalidFormat   : false,
-            userInvalidated : false,
-            iso             : false
-        };
-    }
-
     function isArray(input) {
         return Object.prototype.toString.call(input) === '[object Array]';
     }
 
     function isDate(input) {
-        return Object.prototype.toString.call(input) === '[object Date]' || input instanceof Date;
+        return input instanceof Date || Object.prototype.toString.call(input) === '[object Date]';
     }
 
     function map(arr, fn) {
@@ -15388,21 +9283,46 @@ String.prototype.score = function (word, fuzziness) {
         return createLocalOrUTC(input, format, locale, strict, true).utc();
     }
 
+    function defaultParsingFlags() {
+        // We need to deep clone this object.
+        return {
+            empty           : false,
+            unusedTokens    : [],
+            unusedInput     : [],
+            overflow        : -2,
+            charsLeftOver   : 0,
+            nullInput       : false,
+            invalidMonth    : null,
+            invalidFormat   : false,
+            userInvalidated : false,
+            iso             : false
+        };
+    }
+
+    function getParsingFlags(m) {
+        if (m._pf == null) {
+            m._pf = defaultParsingFlags();
+        }
+        return m._pf;
+    }
+
     function valid__isValid(m) {
         if (m._isValid == null) {
+            var flags = getParsingFlags(m);
             m._isValid = !isNaN(m._d.getTime()) &&
-                m._pf.overflow < 0 &&
-                !m._pf.empty &&
-                !m._pf.invalidMonth &&
-                !m._pf.nullInput &&
-                !m._pf.invalidFormat &&
-                !m._pf.userInvalidated;
+                flags.overflow < 0 &&
+                !flags.empty &&
+                !flags.invalidMonth &&
+                !flags.invalidWeekday &&
+                !flags.nullInput &&
+                !flags.invalidFormat &&
+                !flags.userInvalidated;
 
             if (m._strict) {
                 m._isValid = m._isValid &&
-                    m._pf.charsLeftOver === 0 &&
-                    m._pf.unusedTokens.length === 0 &&
-                    m._pf.bigHour === undefined;
+                    flags.charsLeftOver === 0 &&
+                    flags.unusedTokens.length === 0 &&
+                    flags.bigHour === undefined;
             }
         }
         return m._isValid;
@@ -15411,10 +9331,10 @@ String.prototype.score = function (word, fuzziness) {
     function valid__createInvalid (flags) {
         var m = create_utc__createUTC(NaN);
         if (flags != null) {
-            extend(m._pf, flags);
+            extend(getParsingFlags(m), flags);
         }
         else {
-            m._pf.userInvalidated = true;
+            getParsingFlags(m).userInvalidated = true;
         }
 
         return m;
@@ -15450,7 +9370,7 @@ String.prototype.score = function (word, fuzziness) {
             to._offset = from._offset;
         }
         if (typeof from._pf !== 'undefined') {
-            to._pf = from._pf;
+            to._pf = getParsingFlags(from);
         }
         if (typeof from._locale !== 'undefined') {
             to._locale = from._locale;
@@ -15474,7 +9394,7 @@ String.prototype.score = function (word, fuzziness) {
     // Moment prototype object
     function Moment(config) {
         copyConfig(this, config);
-        this._d = new Date(+config._d);
+        this._d = new Date(config._d != null ? config._d.getTime() : NaN);
         // Prevent infinite loop in case updateOffset creates new moment
         // objects.
         if (updateInProgress === false) {
@@ -15485,7 +9405,15 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function isMoment (obj) {
-        return obj instanceof Moment || (obj != null && hasOwnProp(obj, '_isAMomentObject'));
+        return obj instanceof Moment || (obj != null && obj._isAMomentObject != null);
+    }
+
+    function absFloor (number) {
+        if (number < 0) {
+            return Math.ceil(number);
+        } else {
+            return Math.floor(number);
+        }
     }
 
     function toInt(argumentForCoercion) {
@@ -15493,11 +9421,7 @@ String.prototype.score = function (word, fuzziness) {
             value = 0;
 
         if (coercedNumber !== 0 && isFinite(coercedNumber)) {
-            if (coercedNumber >= 0) {
-                value = Math.floor(coercedNumber);
-            } else {
-                value = Math.ceil(coercedNumber);
-            }
+            value = absFloor(coercedNumber);
         }
 
         return value;
@@ -15595,9 +9519,7 @@ String.prototype.score = function (word, fuzziness) {
     function defineLocale (name, values) {
         if (values !== null) {
             values.abbr = name;
-            if (!locales[name]) {
-                locales[name] = new Locale();
-            }
+            locales[name] = locales[name] || new Locale();
             locales[name].set(values);
 
             // backwards compat for now: also set the locale
@@ -15701,16 +9623,14 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function zeroFill(number, targetLength, forceSign) {
-        var output = '' + Math.abs(number),
+        var absNumber = '' + Math.abs(number),
+            zerosToFill = targetLength - absNumber.length,
             sign = number >= 0;
-
-        while (output.length < targetLength) {
-            output = '0' + output;
-        }
-        return (sign ? (forceSign ? '+' : '') : '-') + output;
+        return (sign ? (forceSign ? '+' : '') : '-') +
+            Math.pow(10, Math.max(0, zerosToFill)).toString().substr(1) + absNumber;
     }
 
-    var formattingTokens = /(\[[^\[]*\])|(\\)?(Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Q|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,4}|x|X|zz?|ZZ?|.)/g;
+    var formattingTokens = /(\[[^\[]*\])|(\\)?(Mo|MM?M?M?|Do|DDDo|DD?D?D?|ddd?d?|do?|w[o|w]?|W[o|W]?|Q|YYYYYY|YYYYY|YYYY|YY|gg(ggg?)?|GG(GGG?)?|e|E|a|A|hh?|HH?|mm?|ss?|S{1,9}|x|X|zz?|ZZ?|.)/g;
 
     var localFormattingTokens = /(\[[^\[]*\])|(\\)?(LTS|LT|LL?L?L?|l{1,4})/g;
 
@@ -15778,10 +9698,7 @@ String.prototype.score = function (word, fuzziness) {
         }
 
         format = expandFormat(format, m.localeData());
-
-        if (!formatFunctions[format]) {
-            formatFunctions[format] = makeFormatFunction(format);
-        }
+        formatFunctions[format] = formatFunctions[format] || makeFormatFunction(format);
 
         return formatFunctions[format](m);
     }
@@ -15825,8 +9742,15 @@ String.prototype.score = function (word, fuzziness) {
 
     var regexes = {};
 
+    function isFunction (sth) {
+        // https://github.com/moment/moment/issues/2325
+        return typeof sth === 'function' &&
+            Object.prototype.toString.call(sth) === '[object Function]';
+    }
+
+
     function addRegexToken (token, regex, strictRegex) {
-        regexes[token] = typeof regex === 'function' ? regex : function (isStrict) {
+        regexes[token] = isFunction(regex) ? regex : function (isStrict) {
             return (isStrict && strictRegex) ? strictRegex : regex;
         };
     }
@@ -15923,7 +9847,7 @@ String.prototype.score = function (word, fuzziness) {
         if (month != null) {
             array[MONTH] = month;
         } else {
-            config._pf.invalidMonth = input;
+            getParsingFlags(config).invalidMonth = input;
         }
     });
 
@@ -16007,7 +9931,7 @@ String.prototype.score = function (word, fuzziness) {
         var overflow;
         var a = m._a;
 
-        if (a && m._pf.overflow === -2) {
+        if (a && getParsingFlags(m).overflow === -2) {
             overflow =
                 a[MONTH]       < 0 || a[MONTH]       > 11  ? MONTH :
                 a[DATE]        < 1 || a[DATE]        > daysInMonth(a[YEAR], a[MONTH]) ? DATE :
@@ -16017,11 +9941,11 @@ String.prototype.score = function (word, fuzziness) {
                 a[MILLISECOND] < 0 || a[MILLISECOND] > 999 ? MILLISECOND :
                 -1;
 
-            if (m._pf._overflowDayOfYear && (overflow < YEAR || overflow > DATE)) {
+            if (getParsingFlags(m)._overflowDayOfYear && (overflow < YEAR || overflow > DATE)) {
                 overflow = DATE;
             }
 
-            m._pf.overflow = overflow;
+            getParsingFlags(m).overflow = overflow;
         }
 
         return m;
@@ -16035,9 +9959,10 @@ String.prototype.score = function (word, fuzziness) {
 
     function deprecate(msg, fn) {
         var firstTime = true;
+
         return extend(function () {
             if (firstTime) {
-                warn(msg);
+                warn(msg + '\n' + (new Error()).stack);
                 firstTime = false;
             }
             return fn.apply(this, arguments);
@@ -16082,17 +10007,17 @@ String.prototype.score = function (word, fuzziness) {
             match = from_string__isoRegex.exec(string);
 
         if (match) {
-            config._pf.iso = true;
+            getParsingFlags(config).iso = true;
             for (i = 0, l = isoDates.length; i < l; i++) {
                 if (isoDates[i][1].exec(string)) {
-                    // match[5] should be 'T' or undefined
-                    config._f = isoDates[i][0] + (match[6] || ' ');
+                    config._f = isoDates[i][0];
                     break;
                 }
             }
             for (i = 0, l = isoTimes.length; i < l; i++) {
                 if (isoTimes[i][1].exec(string)) {
-                    config._f += isoTimes[i][0];
+                    // match[6] should be 'T' or space
+                    config._f += (match[6] || ' ') + isoTimes[i][0];
                     break;
                 }
             }
@@ -16171,7 +10096,10 @@ String.prototype.score = function (word, fuzziness) {
     addRegexToken('YYYYY',  match1to6, match6);
     addRegexToken('YYYYYY', match1to6, match6);
 
-    addParseToken(['YYYY', 'YYYYY', 'YYYYYY'], YEAR);
+    addParseToken(['YYYYY', 'YYYYYY'], YEAR);
+    addParseToken('YYYY', function (input, array) {
+        array[YEAR] = input.length === 2 ? utils_hooks__hooks.parseTwoDigitYear(input) : toInt(input);
+    });
     addParseToken('YY', function (input, array) {
         array[YEAR] = utils_hooks__hooks.parseTwoDigitYear(input);
     });
@@ -16298,18 +10226,18 @@ String.prototype.score = function (word, fuzziness) {
 
     //http://en.wikipedia.org/wiki/ISO_week_date#Calculating_a_date_given_the_year.2C_week_number_and_weekday
     function dayOfYearFromWeeks(year, week, weekday, firstDayOfWeekOfYear, firstDayOfWeek) {
-        var d = createUTCDate(year, 0, 1).getUTCDay();
-        var daysToAdd;
-        var dayOfYear;
+        var week1Jan = 6 + firstDayOfWeek - firstDayOfWeekOfYear, janX = createUTCDate(year, 0, 1 + week1Jan), d = janX.getUTCDay(), dayOfYear;
+        if (d < firstDayOfWeek) {
+            d += 7;
+        }
 
-        d = d === 0 ? 7 : d;
-        weekday = weekday != null ? weekday : firstDayOfWeek;
-        daysToAdd = firstDayOfWeek - d + (d > firstDayOfWeekOfYear ? 7 : 0) - (d < firstDayOfWeek ? 7 : 0);
-        dayOfYear = 7 * (week - 1) + (weekday - firstDayOfWeek) + daysToAdd + 1;
+        weekday = weekday != null ? 1 * weekday : firstDayOfWeek;
+
+        dayOfYear = 1 + week1Jan + 7 * (week - 1) - d + weekday;
 
         return {
-            year      : dayOfYear > 0 ? year      : year - 1,
-            dayOfYear : dayOfYear > 0 ? dayOfYear : daysInYear(year - 1) + dayOfYear
+            year: dayOfYear > 0 ? year : year - 1,
+            dayOfYear: dayOfYear > 0 ?  dayOfYear : daysInYear(year - 1) + dayOfYear
         };
     }
 
@@ -16362,7 +10290,7 @@ String.prototype.score = function (word, fuzziness) {
             yearToUse = defaults(config._a[YEAR], currentDate[YEAR]);
 
             if (config._dayOfYear > daysInYear(yearToUse)) {
-                config._pf._overflowDayOfYear = true;
+                getParsingFlags(config)._overflowDayOfYear = true;
             }
 
             date = createUTCDate(yearToUse, 0, config._dayOfYear);
@@ -16458,7 +10386,7 @@ String.prototype.score = function (word, fuzziness) {
         }
 
         config._a = [];
-        config._pf.empty = true;
+        getParsingFlags(config).empty = true;
 
         // This array is used to make a Date, either with `new Date` or `Date.UTC`
         var string = '' + config._i,
@@ -16474,7 +10402,7 @@ String.prototype.score = function (word, fuzziness) {
             if (parsedInput) {
                 skipped = string.substr(0, string.indexOf(parsedInput));
                 if (skipped.length > 0) {
-                    config._pf.unusedInput.push(skipped);
+                    getParsingFlags(config).unusedInput.push(skipped);
                 }
                 string = string.slice(string.indexOf(parsedInput) + parsedInput.length);
                 totalParsedInputLength += parsedInput.length;
@@ -16482,27 +10410,29 @@ String.prototype.score = function (word, fuzziness) {
             // don't parse if it's not a known token
             if (formatTokenFunctions[token]) {
                 if (parsedInput) {
-                    config._pf.empty = false;
+                    getParsingFlags(config).empty = false;
                 }
                 else {
-                    config._pf.unusedTokens.push(token);
+                    getParsingFlags(config).unusedTokens.push(token);
                 }
                 addTimeToArrayFromToken(token, parsedInput, config);
             }
             else if (config._strict && !parsedInput) {
-                config._pf.unusedTokens.push(token);
+                getParsingFlags(config).unusedTokens.push(token);
             }
         }
 
         // add remaining unparsed input length to the string
-        config._pf.charsLeftOver = stringLength - totalParsedInputLength;
+        getParsingFlags(config).charsLeftOver = stringLength - totalParsedInputLength;
         if (string.length > 0) {
-            config._pf.unusedInput.push(string);
+            getParsingFlags(config).unusedInput.push(string);
         }
 
         // clear _12h flag if hour is <= 12
-        if (config._pf.bigHour === true && config._a[HOUR] <= 12) {
-            config._pf.bigHour = undefined;
+        if (getParsingFlags(config).bigHour === true &&
+                config._a[HOUR] <= 12 &&
+                config._a[HOUR] > 0) {
+            getParsingFlags(config).bigHour = undefined;
         }
         // handle meridiem
         config._a[HOUR] = meridiemFixWrap(config._locale, config._a[HOUR], config._meridiem);
@@ -16546,7 +10476,7 @@ String.prototype.score = function (word, fuzziness) {
             currentScore;
 
         if (config._f.length === 0) {
-            config._pf.invalidFormat = true;
+            getParsingFlags(config).invalidFormat = true;
             config._d = new Date(NaN);
             return;
         }
@@ -16557,7 +10487,6 @@ String.prototype.score = function (word, fuzziness) {
             if (config._useUTC != null) {
                 tempConfig._useUTC = config._useUTC;
             }
-            tempConfig._pf = defaultParsingFlags();
             tempConfig._f = config._f[i];
             configFromStringAndFormat(tempConfig);
 
@@ -16566,12 +10495,12 @@ String.prototype.score = function (word, fuzziness) {
             }
 
             // if there is any input that was not parsed add a penalty for that format
-            currentScore += tempConfig._pf.charsLeftOver;
+            currentScore += getParsingFlags(tempConfig).charsLeftOver;
 
             //or tokens
-            currentScore += tempConfig._pf.unusedTokens.length * 10;
+            currentScore += getParsingFlags(tempConfig).unusedTokens.length * 10;
 
-            tempConfig._pf.score = currentScore;
+            getParsingFlags(tempConfig).score = currentScore;
 
             if (scoreToBeat == null || currentScore < scoreToBeat) {
                 scoreToBeat = currentScore;
@@ -16594,9 +10523,19 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function createFromConfig (config) {
+        var res = new Moment(checkOverflow(prepareConfig(config)));
+        if (res._nextDay) {
+            // Adding is smart enough around DST
+            res.add(1, 'd');
+            res._nextDay = undefined;
+        }
+
+        return res;
+    }
+
+    function prepareConfig (config) {
         var input = config._i,
-            format = config._f,
-            res;
+            format = config._f;
 
         config._locale = config._locale || locale_locales__getLocale(config._l);
 
@@ -16614,18 +10553,13 @@ String.prototype.score = function (word, fuzziness) {
             configFromStringAndArray(config);
         } else if (format) {
             configFromStringAndFormat(config);
+        } else if (isDate(input)) {
+            config._d = input;
         } else {
             configFromInput(config);
         }
 
-        res = new Moment(checkOverflow(config));
-        if (res._nextDay) {
-            // Adding is smart enough around DST
-            res.add(1, 'd');
-            res._nextDay = undefined;
-        }
-
-        return res;
+        return config;
     }
 
     function configFromInput(config) {
@@ -16666,7 +10600,6 @@ String.prototype.score = function (word, fuzziness) {
         c._i = input;
         c._f = format;
         c._strict = strict;
-        c._pf = defaultParsingFlags();
 
         return createFromConfig(c);
     }
@@ -16706,7 +10639,7 @@ String.prototype.score = function (word, fuzziness) {
         }
         res = moments[0];
         for (i = 1; i < moments.length; ++i) {
-            if (moments[i][fn](res)) {
+            if (!moments[i].isValid() || moments[i][fn](res)) {
                 res = moments[i];
             }
         }
@@ -16818,7 +10751,6 @@ String.prototype.score = function (word, fuzziness) {
         } else {
             return local__createLocal(input).local();
         }
-        return model._isUTC ? local__createLocal(input).zone(model._offset || 0) : local__createLocal(input).local();
     }
 
     function getDateOffset (m) {
@@ -16918,12 +10850,7 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function hasAlignedHourOffset (input) {
-        if (!input) {
-            input = 0;
-        }
-        else {
-            input = local__createLocal(input).utcOffset();
-        }
+        input = input ? local__createLocal(input).utcOffset() : 0;
 
         return (this.utcOffset() - input) % 60 === 0;
     }
@@ -16936,12 +10863,24 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function isDaylightSavingTimeShifted () {
-        if (this._a) {
-            var other = this._isUTC ? create_utc__createUTC(this._a) : local__createLocal(this._a);
-            return this.isValid() && compareArrays(this._a, other.toArray()) > 0;
+        if (typeof this._isDSTShifted !== 'undefined') {
+            return this._isDSTShifted;
         }
 
-        return false;
+        var c = {};
+
+        copyConfig(c, this);
+        c = prepareConfig(c);
+
+        if (c._a) {
+            var other = c._isUTC ? create_utc__createUTC(c._a) : local__createLocal(c._a);
+            this._isDSTShifted = this.isValid() &&
+                compareArrays(c._a, other.toArray()) > 0;
+        } else {
+            this._isDSTShifted = false;
+        }
+
+        return this._isDSTShifted;
     }
 
     function isLocal () {
@@ -17101,7 +11040,7 @@ String.prototype.score = function (word, fuzziness) {
     var add_subtract__add      = createAdder(1, 'add');
     var add_subtract__subtract = createAdder(-1, 'subtract');
 
-    function moment_calendar__calendar (time) {
+    function moment_calendar__calendar (time, formats) {
         // We want to compare the start of today, vs this.
         // Getting start-of-today depends on whether we're local/utc/offset or not.
         var now = time || local__createLocal(),
@@ -17113,7 +11052,7 @@ String.prototype.score = function (word, fuzziness) {
                 diff < 1 ? 'sameDay' :
                 diff < 2 ? 'nextDay' :
                 diff < 7 ? 'nextWeek' : 'sameElse';
-        return this.format(this.localeData().calendar(format, this, local__createLocal(now)));
+        return this.format(formats && formats[format] || this.localeData().calendar(format, this, local__createLocal(now)));
     }
 
     function clone () {
@@ -17157,14 +11096,6 @@ String.prototype.score = function (word, fuzziness) {
         } else {
             inputMs = +local__createLocal(input);
             return +(this.clone().startOf(units)) <= inputMs && inputMs <= +(this.clone().endOf(units));
-        }
-    }
-
-    function absFloor (number) {
-        if (number < 0) {
-            return Math.ceil(number);
-        } else {
-            return Math.floor(number);
         }
     }
 
@@ -17240,11 +11171,25 @@ String.prototype.score = function (word, fuzziness) {
     }
 
     function from (time, withoutSuffix) {
+        if (!this.isValid()) {
+            return this.localeData().invalidDate();
+        }
         return create__createDuration({to: this, from: time}).locale(this.locale()).humanize(!withoutSuffix);
     }
 
     function fromNow (withoutSuffix) {
         return this.from(local__createLocal(), withoutSuffix);
+    }
+
+    function to (time, withoutSuffix) {
+        if (!this.isValid()) {
+            return this.localeData().invalidDate();
+        }
+        return create__createDuration({from: this, to: time}).locale(this.locale()).humanize(!withoutSuffix);
+    }
+
+    function toNow (withoutSuffix) {
+        return this.to(local__createLocal(), withoutSuffix);
     }
 
     function locale (key) {
@@ -17344,16 +11289,29 @@ String.prototype.score = function (word, fuzziness) {
         return [m.year(), m.month(), m.date(), m.hour(), m.minute(), m.second(), m.millisecond()];
     }
 
+    function toObject () {
+        var m = this;
+        return {
+            years: m.year(),
+            months: m.month(),
+            date: m.date(),
+            hours: m.hours(),
+            minutes: m.minutes(),
+            seconds: m.seconds(),
+            milliseconds: m.milliseconds()
+        };
+    }
+
     function moment_valid__isValid () {
         return valid__isValid(this);
     }
 
     function parsingFlags () {
-        return extend({}, this._pf);
+        return extend({}, getParsingFlags(this));
     }
 
     function invalidAt () {
-        return this._pf.overflow;
+        return getParsingFlags(this).overflow;
     }
 
     addFormatToken(0, ['gg', 2], 0, function () {
@@ -17504,7 +11462,7 @@ String.prototype.score = function (word, fuzziness) {
         if (weekday != null) {
             week.d = weekday;
         } else {
-            config._pf.invalidWeekday = input;
+            getParsingFlags(config).invalidWeekday = input;
         }
     });
 
@@ -17515,18 +11473,20 @@ String.prototype.score = function (word, fuzziness) {
     // HELPERS
 
     function parseWeekday(input, locale) {
-        if (typeof input === 'string') {
-            if (!isNaN(input)) {
-                input = parseInt(input, 10);
-            }
-            else {
-                input = locale.weekdaysParse(input);
-                if (typeof input !== 'number') {
-                    return null;
-                }
-            }
+        if (typeof input !== 'string') {
+            return input;
         }
-        return input;
+
+        if (!isNaN(input)) {
+            return parseInt(input, 10);
+        }
+
+        input = locale.weekdaysParse(input);
+        if (typeof input === 'number') {
+            return input;
+        }
+
+        return null;
     }
 
     // LOCALES
@@ -17549,9 +11509,7 @@ String.prototype.score = function (word, fuzziness) {
     function localeWeekdaysParse (weekdayName) {
         var i, mom, regex;
 
-        if (!this._weekdaysParse) {
-            this._weekdaysParse = [];
-        }
+        this._weekdaysParse = this._weekdaysParse || [];
 
         for (i = 0; i < 7; i++) {
             // make the regex if we don't have it already
@@ -17629,7 +11587,7 @@ String.prototype.score = function (word, fuzziness) {
     });
     addParseToken(['h', 'hh'], function (input, array, config) {
         array[HOUR] = toInt(input);
-        config._pf.bigHour = true;
+        getParsingFlags(config).bigHour = true;
     });
 
     // LOCALES
@@ -17698,12 +11656,26 @@ String.prototype.score = function (word, fuzziness) {
         return ~~(this.millisecond() / 10);
     });
 
-    function millisecond__milliseconds (token) {
-        addFormatToken(0, [token, 3], 0, 'millisecond');
-    }
+    addFormatToken(0, ['SSS', 3], 0, 'millisecond');
+    addFormatToken(0, ['SSSS', 4], 0, function () {
+        return this.millisecond() * 10;
+    });
+    addFormatToken(0, ['SSSSS', 5], 0, function () {
+        return this.millisecond() * 100;
+    });
+    addFormatToken(0, ['SSSSSS', 6], 0, function () {
+        return this.millisecond() * 1000;
+    });
+    addFormatToken(0, ['SSSSSSS', 7], 0, function () {
+        return this.millisecond() * 10000;
+    });
+    addFormatToken(0, ['SSSSSSSS', 8], 0, function () {
+        return this.millisecond() * 100000;
+    });
+    addFormatToken(0, ['SSSSSSSSS', 9], 0, function () {
+        return this.millisecond() * 1000000;
+    });
 
-    millisecond__milliseconds('SSS');
-    millisecond__milliseconds('SSSS');
 
     // ALIASES
 
@@ -17714,11 +11686,19 @@ String.prototype.score = function (word, fuzziness) {
     addRegexToken('S',    match1to3, match1);
     addRegexToken('SS',   match1to3, match2);
     addRegexToken('SSS',  match1to3, match3);
-    addRegexToken('SSSS', matchUnsigned);
-    addParseToken(['S', 'SS', 'SSS', 'SSSS'], function (input, array) {
-        array[MILLISECOND] = toInt(('0.' + input) * 1000);
-    });
 
+    var token;
+    for (token = 'SSSS'; token.length <= 9; token += 'S') {
+        addRegexToken(token, matchUnsigned);
+    }
+
+    function parseMs(input, array) {
+        array[MILLISECOND] = toInt(('0.' + input) * 1000);
+    }
+
+    for (token = 'S'; token.length <= 9; token += 'S') {
+        addParseToken(token, parseMs);
+    }
     // MOMENTS
 
     var getSetMillisecond = makeGetSet('Milliseconds', false);
@@ -17746,6 +11726,8 @@ String.prototype.score = function (word, fuzziness) {
     momentPrototype__proto.format       = format;
     momentPrototype__proto.from         = from;
     momentPrototype__proto.fromNow      = fromNow;
+    momentPrototype__proto.to           = to;
+    momentPrototype__proto.toNow        = toNow;
     momentPrototype__proto.get          = getSet;
     momentPrototype__proto.invalidAt    = invalidAt;
     momentPrototype__proto.isAfter      = isAfter;
@@ -17763,6 +11745,7 @@ String.prototype.score = function (word, fuzziness) {
     momentPrototype__proto.startOf      = startOf;
     momentPrototype__proto.subtract     = add_subtract__subtract;
     momentPrototype__proto.toArray      = toArray;
+    momentPrototype__proto.toObject     = toObject;
     momentPrototype__proto.toDate       = toDate;
     momentPrototype__proto.toISOString  = moment_format__toISOString;
     momentPrototype__proto.toJSON       = moment_format__toISOString;
@@ -17862,19 +11845,23 @@ String.prototype.score = function (word, fuzziness) {
         LT   : 'h:mm A',
         L    : 'MM/DD/YYYY',
         LL   : 'MMMM D, YYYY',
-        LLL  : 'MMMM D, YYYY LT',
-        LLLL : 'dddd, MMMM D, YYYY LT'
+        LLL  : 'MMMM D, YYYY h:mm A',
+        LLLL : 'dddd, MMMM D, YYYY h:mm A'
     };
 
     function longDateFormat (key) {
-        var output = this._longDateFormat[key];
-        if (!output && this._longDateFormat[key.toUpperCase()]) {
-            output = this._longDateFormat[key.toUpperCase()].replace(/MMMM|MM|DD|dddd/g, function (val) {
-                return val.slice(1);
-            });
-            this._longDateFormat[key] = output;
+        var format = this._longDateFormat[key],
+            formatUpper = this._longDateFormat[key.toUpperCase()];
+
+        if (format || !formatUpper) {
+            return format;
         }
-        return output;
+
+        this._longDateFormat[key] = formatUpper.replace(/MMMM|MM|DD|dddd/g, function (val) {
+            return val.slice(1);
+        });
+
+        return this._longDateFormat[key];
     }
 
     var defaultInvalidDate = 'Invalid date';
@@ -17934,7 +11921,7 @@ String.prototype.score = function (word, fuzziness) {
         }
         // Lenient ordinal parsing accepts just a number in addition to
         // number + (possibly) stuff coming from _ordinalParseLenient.
-        this._ordinalParseLenient = new RegExp(this._ordinalParse.source + '|' + /\d{1,2}/.source);
+        this._ordinalParseLenient = new RegExp(this._ordinalParse.source + '|' + (/\d{1,2}/).source);
     }
 
     var prototype__proto = Locale.prototype;
@@ -18083,12 +12070,29 @@ String.prototype.score = function (word, fuzziness) {
         return duration_add_subtract__addSubtract(this, input, value, -1);
     }
 
+    function absCeil (number) {
+        if (number < 0) {
+            return Math.floor(number);
+        } else {
+            return Math.ceil(number);
+        }
+    }
+
     function bubble () {
         var milliseconds = this._milliseconds;
         var days         = this._days;
         var months       = this._months;
         var data         = this._data;
-        var seconds, minutes, hours, years = 0;
+        var seconds, minutes, hours, years, monthsFromDays;
+
+        // if we have a mix of positive and negative values, bubble down first
+        // check: https://github.com/moment/moment/issues/2166
+        if (!((milliseconds >= 0 && days >= 0 && months >= 0) ||
+                (milliseconds <= 0 && days <= 0 && months <= 0))) {
+            milliseconds += absCeil(monthsToDays(months) + days) * 864e5;
+            days = 0;
+            months = 0;
+        }
 
         // The following code bubbles up values, see the tests for
         // examples of what that means.
@@ -18105,17 +12109,13 @@ String.prototype.score = function (word, fuzziness) {
 
         days += absFloor(hours / 24);
 
-        // Accurately convert days to years, assume start from year 0.
-        years = absFloor(daysToYears(days));
-        days -= absFloor(yearsToDays(years));
-
-        // 30 days to a month
-        // TODO (iskren): Use anchor date (like 1st Jan) to compute this.
-        months += absFloor(days / 30);
-        days   %= 30;
+        // convert days to months
+        monthsFromDays = absFloor(daysToMonths(days));
+        months += monthsFromDays;
+        days -= absCeil(monthsToDays(monthsFromDays));
 
         // 12 months -> 1 year
-        years  += absFloor(months / 12);
+        years = absFloor(months / 12);
         months %= 12;
 
         data.days   = days;
@@ -18125,15 +12125,15 @@ String.prototype.score = function (word, fuzziness) {
         return this;
     }
 
-    function daysToYears (days) {
+    function daysToMonths (days) {
         // 400 years have 146097 days (taking into account leap year rules)
-        return days * 400 / 146097;
+        // 400 years have 12 months === 4800
+        return days * 4800 / 146097;
     }
 
-    function yearsToDays (years) {
-        // years * 365 + absFloor(years / 4) -
-        //     absFloor(years / 100) + absFloor(years / 400);
-        return years * 146097 / 400;
+    function monthsToDays (months) {
+        // the reverse of daysToMonths
+        return months * 146097 / 4800;
     }
 
     function as (units) {
@@ -18145,19 +12145,19 @@ String.prototype.score = function (word, fuzziness) {
 
         if (units === 'month' || units === 'year') {
             days   = this._days   + milliseconds / 864e5;
-            months = this._months + daysToYears(days) * 12;
+            months = this._months + daysToMonths(days);
             return units === 'month' ? months : months / 12;
         } else {
             // handle milliseconds separately because of floating point math errors (issue #1867)
-            days = this._days + Math.round(yearsToDays(this._months / 12));
+            days = this._days + Math.round(monthsToDays(this._months));
             switch (units) {
-                case 'week'   : return days / 7            + milliseconds / 6048e5;
-                case 'day'    : return days                + milliseconds / 864e5;
-                case 'hour'   : return days * 24           + milliseconds / 36e5;
-                case 'minute' : return days * 24 * 60      + milliseconds / 6e4;
-                case 'second' : return days * 24 * 60 * 60 + milliseconds / 1000;
+                case 'week'   : return days / 7     + milliseconds / 6048e5;
+                case 'day'    : return days         + milliseconds / 864e5;
+                case 'hour'   : return days * 24    + milliseconds / 36e5;
+                case 'minute' : return days * 1440  + milliseconds / 6e4;
+                case 'second' : return days * 86400 + milliseconds / 1000;
                 // Math.floor prevents floating point math errors here
-                case 'millisecond': return Math.floor(days * 24 * 60 * 60 * 1000) + milliseconds;
+                case 'millisecond': return Math.floor(days * 864e5) + milliseconds;
                 default: throw new Error('Unknown unit ' + units);
             }
         }
@@ -18199,7 +12199,7 @@ String.prototype.score = function (word, fuzziness) {
         };
     }
 
-    var duration_get__milliseconds = makeGetter('milliseconds');
+    var milliseconds = makeGetter('milliseconds');
     var seconds      = makeGetter('seconds');
     var minutes      = makeGetter('minutes');
     var hours        = makeGetter('hours');
@@ -18277,13 +12277,36 @@ String.prototype.score = function (word, fuzziness) {
     var iso_string__abs = Math.abs;
 
     function iso_string__toISOString() {
+        // for ISO strings we do not use the normal bubbling rules:
+        //  * milliseconds bubble up until they become hours
+        //  * days do not bubble at all
+        //  * months bubble up until they become years
+        // This is because there is no context-free conversion between hours and days
+        // (think of clock changes)
+        // and also not between days and months (28-31 days per month)
+        var seconds = iso_string__abs(this._milliseconds) / 1000;
+        var days         = iso_string__abs(this._days);
+        var months       = iso_string__abs(this._months);
+        var minutes, hours, years;
+
+        // 3600 seconds -> 60 minutes -> 1 hour
+        minutes           = absFloor(seconds / 60);
+        hours             = absFloor(minutes / 60);
+        seconds %= 60;
+        minutes %= 60;
+
+        // 12 months -> 1 year
+        years  = absFloor(months / 12);
+        months %= 12;
+
+
         // inspired by https://github.com/dordille/moment-isoduration/blob/master/moment.isoduration.js
-        var Y = iso_string__abs(this.years());
-        var M = iso_string__abs(this.months());
-        var D = iso_string__abs(this.days());
-        var h = iso_string__abs(this.hours());
-        var m = iso_string__abs(this.minutes());
-        var s = iso_string__abs(this.seconds() + this.milliseconds() / 1000);
+        var Y = years;
+        var M = months;
+        var D = days;
+        var h = hours;
+        var m = minutes;
+        var s = seconds;
         var total = this.asSeconds();
 
         if (!total) {
@@ -18320,7 +12343,7 @@ String.prototype.score = function (word, fuzziness) {
     duration_prototype__proto.valueOf        = duration_as__valueOf;
     duration_prototype__proto._bubble        = bubble;
     duration_prototype__proto.get            = duration_get__get;
-    duration_prototype__proto.milliseconds   = duration_get__milliseconds;
+    duration_prototype__proto.milliseconds   = milliseconds;
     duration_prototype__proto.seconds        = seconds;
     duration_prototype__proto.minutes        = minutes;
     duration_prototype__proto.hours          = hours;
@@ -18358,7 +12381,7 @@ String.prototype.score = function (word, fuzziness) {
     // Side effect imports
 
 
-    utils_hooks__hooks.version = '2.10.2';
+    utils_hooks__hooks.version = '2.10.6';
 
     setHookCallback(local__createLocal);
 
@@ -18389,7 +12412,7 @@ String.prototype.score = function (word, fuzziness) {
     return _moment;
 
 }));
-},{}],150:[function(require,module,exports){
+},{}],119:[function(require,module,exports){
 /*global define:false */
 /**
  * Copyright 2015 Craig Campbell
@@ -19412,7 +13435,7 @@ String.prototype.score = function (word, fuzziness) {
     }
 }) (window, document);
 
-},{}],151:[function(require,module,exports){
+},{}],120:[function(require,module,exports){
 /**
  * adds a bindGlobal method to Mousetrap that allows you to
  * bind specific keyboard shortcuts that will still work
@@ -19457,7 +13480,7 @@ String.prototype.score = function (word, fuzziness) {
     Mousetrap.init();
 }) (Mousetrap);
 
-},{}],152:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 /* NProgress, (c) 2013, 2014 Rico Sta. Cruz - http://ricostacruz.com/nprogress
  * @license MIT */
 
@@ -19935,7 +13958,7 @@ String.prototype.score = function (word, fuzziness) {
 });
 
 
-},{}],153:[function(require,module,exports){
+},{}],122:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -19943,7 +13966,7 @@ String.prototype.score = function (word, fuzziness) {
 
 module.exports = require('./src/js/adaptor/jquery');
 
-},{"./src/js/adaptor/jquery":154}],154:[function(require,module,exports){
+},{"./src/js/adaptor/jquery":123}],123:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -19991,7 +14014,7 @@ if (typeof define === 'function' && define.amd) {
 
 module.exports = mountJQuery;
 
-},{"../main":160,"../plugin/instances":171}],155:[function(require,module,exports){
+},{"../main":129,"../plugin/instances":140}],124:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20032,25 +14055,27 @@ exports.remove = function (element, className) {
 
 exports.list = function (element) {
   if (element.classList) {
-    return element.classList;
+    return Array.prototype.slice.apply(element.classList);
   } else {
     return element.className.split(' ');
   }
 };
 
-},{}],156:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
 'use strict';
 
-exports.e = function (tagName, className) {
+var DOM = {};
+
+DOM.e = function (tagName, className) {
   var element = document.createElement(tagName);
   element.className = className;
   return element;
 };
 
-exports.appendTo = function (child, parent) {
+DOM.appendTo = function (child, parent) {
   parent.appendChild(child);
   return child;
 };
@@ -20078,7 +14103,7 @@ function cssMultiSet(element, obj) {
   return element;
 }
 
-exports.css = function (element, styleNameOrObject, styleValue) {
+DOM.css = function (element, styleNameOrObject, styleValue) {
   if (typeof styleNameOrObject === 'object') {
     // multiple set with object
     return cssMultiSet(element, styleNameOrObject);
@@ -20091,7 +14116,7 @@ exports.css = function (element, styleNameOrObject, styleValue) {
   }
 };
 
-exports.matches = function (element, query) {
+DOM.matches = function (element, query) {
   if (typeof element.matches !== 'undefined') {
     return element.matches(query);
   } else {
@@ -20107,7 +14132,7 @@ exports.matches = function (element, query) {
   }
 };
 
-exports.remove = function (element) {
+DOM.remove = function (element) {
   if (typeof element.remove !== 'undefined') {
     element.remove();
   } else {
@@ -20117,7 +14142,15 @@ exports.remove = function (element) {
   }
 };
 
-},{}],157:[function(require,module,exports){
+DOM.queryChildren = function (element, selector) {
+  return Array.prototype.filter.call(element.childNodes, function (child) {
+    return DOM.matches(child, selector);
+  });
+};
+
+module.exports = DOM;
+
+},{}],126:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20193,7 +14226,7 @@ EventManager.prototype.once = function (element, eventName, handler) {
 
 module.exports = EventManager;
 
-},{}],158:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20211,7 +14244,7 @@ module.exports = (function () {
   };
 })();
 
-},{}],159:[function(require,module,exports){
+},{}],128:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20297,7 +14330,7 @@ exports.env = {
   supportsIePointer: window.navigator.msMaxTouchPoints !== null
 };
 
-},{"./class":155,"./dom":156}],160:[function(require,module,exports){
+},{"./class":124,"./dom":125}],129:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20313,27 +14346,29 @@ module.exports = {
   destroy: destroy
 };
 
-},{"./plugin/destroy":162,"./plugin/initialize":170,"./plugin/update":173}],161:[function(require,module,exports){
+},{"./plugin/destroy":131,"./plugin/initialize":139,"./plugin/update":143}],130:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
 'use strict';
 
 module.exports = {
-  wheelSpeed: 1,
-  wheelPropagation: false,
-  swipePropagation: true,
-  minScrollbarLength: null,
   maxScrollbarLength: null,
-  useBothWheelAxes: false,
-  useKeyboard: true,
+  minScrollbarLength: null,
+  scrollXMarginOffset: 0,
+  scrollYMarginOffset: 0,
+  stopPropagationOnClick: true,
   suppressScrollX: false,
   suppressScrollY: false,
-  scrollXMarginOffset: 0,
-  scrollYMarginOffset: 0
+  swipePropagation: true,
+  useBothWheelAxes: false,
+  useKeyboard: true,
+  useSelectionScroll: false,
+  wheelPropagation: false,
+  wheelSpeed: 1
 };
 
-},{}],162:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20346,6 +14381,10 @@ var d = require('../lib/dom')
 module.exports = function (element) {
   var i = instances.get(element);
 
+  if (!i) {
+    return;
+  }
+
   i.event.unbindAll();
   d.remove(i.scrollbarX);
   d.remove(i.scrollbarY);
@@ -20356,7 +14395,7 @@ module.exports = function (element) {
   instances.remove(element);
 };
 
-},{"../lib/dom":156,"../lib/helper":159,"./instances":171}],163:[function(require,module,exports){
+},{"../lib/dom":125,"../lib/helper":128,"./instances":140}],132:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20364,7 +14403,8 @@ module.exports = function (element) {
 
 var h = require('../../lib/helper')
   , instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindClickRailHandler(element, i) {
   function pageOffset(el) {
@@ -20372,7 +14412,9 @@ function bindClickRailHandler(element, i) {
   }
   var stopPropagation = window.Event.prototype.stopPropagation.bind;
 
-  i.event.bind(i.scrollbarY, 'click', stopPropagation);
+  if (i.settings.stopPropagationOnClick) {
+    i.event.bind(i.scrollbarY, 'click', stopPropagation);
+  }
   i.event.bind(i.scrollbarYRail, 'click', function (e) {
     var halfOfScrollbarLength = h.toInt(i.scrollbarYHeight / 2);
     var positionTop = i.railYRatio * (e.pageY - window.scrollY - pageOffset(i.scrollbarYRail).top - halfOfScrollbarLength);
@@ -20385,13 +14427,15 @@ function bindClickRailHandler(element, i) {
       positionRatio = 1;
     }
 
-    element.scrollTop = (i.contentHeight - i.containerHeight) * positionRatio;
+    updateScroll(element, 'top', (i.contentHeight - i.containerHeight) * positionRatio);
     updateGeometry(element);
 
     e.stopPropagation();
   });
 
-  i.event.bind(i.scrollbarX, 'click', stopPropagation);
+  if (i.settings.stopPropagationOnClick) {
+    i.event.bind(i.scrollbarX, 'click', stopPropagation);
+  }
   i.event.bind(i.scrollbarXRail, 'click', function (e) {
     var halfOfScrollbarLength = h.toInt(i.scrollbarXWidth / 2);
     var positionLeft = i.railXRatio * (e.pageX - window.scrollX - pageOffset(i.scrollbarXRail).left - halfOfScrollbarLength);
@@ -20404,7 +14448,7 @@ function bindClickRailHandler(element, i) {
       positionRatio = 1;
     }
 
-    element.scrollLeft = (i.contentWidth - i.containerWidth) * positionRatio;
+    updateScroll(element, 'left', ((i.contentWidth - i.containerWidth) * positionRatio) - i.negativeScrollAdjustment);
     updateGeometry(element);
 
     e.stopPropagation();
@@ -20416,7 +14460,7 @@ module.exports = function (element) {
   bindClickRailHandler(element, i);
 };
 
-},{"../../lib/helper":159,"../instances":171,"../update-geometry":172}],164:[function(require,module,exports){
+},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],133:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20425,7 +14469,8 @@ module.exports = function (element) {
 var d = require('../../lib/dom')
   , h = require('../../lib/helper')
   , instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindMouseScrollXHandler(element, i) {
   var currentLeft = null;
@@ -20443,8 +14488,8 @@ function bindMouseScrollXHandler(element, i) {
       i.scrollbarXLeft = newLeft;
     }
 
-    var scrollLeft = h.toInt(i.scrollbarXLeft * (i.contentWidth - i.containerWidth) / (i.containerWidth - (i.railXRatio * i.scrollbarXWidth)));
-    element.scrollLeft = scrollLeft;
+    var scrollLeft = h.toInt(i.scrollbarXLeft * (i.contentWidth - i.containerWidth) / (i.containerWidth - (i.railXRatio * i.scrollbarXWidth))) - i.negativeScrollAdjustment;
+    updateScroll(element, 'left', scrollLeft);
   }
 
   var mouseMoveHandler = function (e) {
@@ -20489,7 +14534,7 @@ function bindMouseScrollYHandler(element, i) {
     }
 
     var scrollTop = h.toInt(i.scrollbarYTop * (i.contentHeight - i.containerHeight) / (i.containerHeight - (i.railYRatio * i.scrollbarYHeight)));
-    element.scrollTop = scrollTop;
+    updateScroll(element, 'top', scrollTop);
   }
 
   var mouseMoveHandler = function (e) {
@@ -20523,7 +14568,7 @@ module.exports = function (element) {
   bindMouseScrollYHandler(element, i);
 };
 
-},{"../../lib/dom":156,"../../lib/helper":159,"../instances":171,"../update-geometry":172}],165:[function(require,module,exports){
+},{"../../lib/dom":125,"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],134:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20531,7 +14576,8 @@ module.exports = function (element) {
 
 var h = require('../../lib/helper')
   , instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindKeyboardHandler(element, i) {
   var hovered = false;
@@ -20606,6 +14652,12 @@ function bindKeyboardHandler(element, i) {
       deltaY = 90;
       break;
     case 32: // space bar
+      if (e.shiftKey) {
+        deltaY = 90;
+      } else {
+        deltaY = -90;
+      }
+      break;
     case 34: // page down
       deltaY = -90;
       break;
@@ -20627,8 +14679,8 @@ function bindKeyboardHandler(element, i) {
       return;
     }
 
-    element.scrollTop = element.scrollTop - deltaY;
-    element.scrollLeft = element.scrollLeft + deltaX;
+    updateScroll(element, 'top', element.scrollTop - deltaY);
+    updateScroll(element, 'left', element.scrollLeft + deltaX);
     updateGeometry(element);
 
     shouldPrevent = shouldPreventDefault(deltaX, deltaY);
@@ -20643,7 +14695,7 @@ module.exports = function (element) {
   bindKeyboardHandler(element, i);
 };
 
-},{"../../lib/helper":159,"../instances":171,"../update-geometry":172}],166:[function(require,module,exports){
+},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],135:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20651,7 +14703,8 @@ module.exports = function (element) {
 
 var h = require('../../lib/helper')
   , instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindMouseWheelHandler(element, i) {
   var shouldPrevent = false;
@@ -20746,24 +14799,24 @@ function bindMouseWheelHandler(element, i) {
     if (!i.settings.useBothWheelAxes) {
       // deltaX will only be used for horizontal scrolling and deltaY will
       // only be used for vertical scrolling - this is the default
-      element.scrollTop = element.scrollTop - (deltaY * i.settings.wheelSpeed);
-      element.scrollLeft = element.scrollLeft + (deltaX * i.settings.wheelSpeed);
+      updateScroll(element, 'top', element.scrollTop - (deltaY * i.settings.wheelSpeed));
+      updateScroll(element, 'left', element.scrollLeft + (deltaX * i.settings.wheelSpeed));
     } else if (i.scrollbarYActive && !i.scrollbarXActive) {
       // only vertical scrollbar is active and useBothWheelAxes option is
       // active, so let's scroll vertical bar using both mouse wheel axes
       if (deltaY) {
-        element.scrollTop = element.scrollTop - (deltaY * i.settings.wheelSpeed);
+        updateScroll(element, 'top', element.scrollTop - (deltaY * i.settings.wheelSpeed));
       } else {
-        element.scrollTop = element.scrollTop + (deltaX * i.settings.wheelSpeed);
+        updateScroll(element, 'top', element.scrollTop + (deltaX * i.settings.wheelSpeed));
       }
       shouldPrevent = true;
     } else if (i.scrollbarXActive && !i.scrollbarYActive) {
       // useBothWheelAxes and only horizontal bar is active, so use both
       // wheel axes for horizontal bar
       if (deltaX) {
-        element.scrollLeft = element.scrollLeft + (deltaX * i.settings.wheelSpeed);
+        updateScroll(element, 'left', element.scrollLeft + (deltaX * i.settings.wheelSpeed));
       } else {
-        element.scrollLeft = element.scrollLeft - (deltaY * i.settings.wheelSpeed);
+        updateScroll(element, 'left', element.scrollLeft - (deltaY * i.settings.wheelSpeed));
       }
       shouldPrevent = true;
     }
@@ -20789,7 +14842,7 @@ module.exports = function (element) {
   bindMouseWheelHandler(element, i);
 };
 
-},{"../../lib/helper":159,"../instances":171,"../update-geometry":172}],167:[function(require,module,exports){
+},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],136:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20809,7 +14862,7 @@ module.exports = function (element) {
   bindNativeScrollHandler(element, i);
 };
 
-},{"../instances":171,"../update-geometry":172}],168:[function(require,module,exports){
+},{"../instances":140,"../update-geometry":141}],137:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -20817,7 +14870,8 @@ module.exports = function (element) {
 
 var h = require('../../lib/helper')
   , instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindSelectionHandler(element, i) {
   function getRangeNode() {
@@ -20840,8 +14894,8 @@ function bindSelectionHandler(element, i) {
           return;
         }
 
-        element.scrollTop = element.scrollTop + scrollDiff.top;
-        element.scrollLeft = element.scrollLeft + scrollDiff.left;
+        updateScroll(element, 'top', element.scrollTop + scrollDiff.top);
+        updateScroll(element, 'left', element.scrollLeft + scrollDiff.left);
         updateGeometry(element);
       }, 50); // every .1 sec
     }
@@ -20922,14 +14976,15 @@ module.exports = function (element) {
   bindSelectionHandler(element, i);
 };
 
-},{"../../lib/helper":159,"../instances":171,"../update-geometry":172}],169:[function(require,module,exports){
+},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],138:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
 'use strict';
 
 var instances = require('../instances')
-  , updateGeometry = require('../update-geometry');
+  , updateGeometry = require('../update-geometry')
+  , updateScroll = require('../update-scroll');
 
 function bindTouchHandler(element, i, supportsTouch, supportsIePointer) {
   function shouldPreventDefault(deltaX, deltaY) {
@@ -20958,8 +15013,8 @@ function bindTouchHandler(element, i, supportsTouch, supportsIePointer) {
   }
 
   function applyTouchMove(differenceX, differenceY) {
-    element.scrollTop = element.scrollTop - differenceY;
-    element.scrollLeft = element.scrollLeft - differenceX;
+    updateScroll(element, 'top', element.scrollTop - differenceY);
+    updateScroll(element, 'left', element.scrollLeft - differenceX);
 
     updateGeometry(element);
   }
@@ -21094,7 +15149,7 @@ module.exports = function (element, supportsTouch, supportsIePointer) {
   bindTouchHandler(element, i, supportsTouch, supportsIePointer);
 };
 
-},{"../instances":171,"../update-geometry":172}],170:[function(require,module,exports){
+},{"../instances":140,"../update-geometry":141,"../update-scroll":142}],139:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -21128,7 +15183,10 @@ module.exports = function (element, userSettings) {
   dragScrollbarHandler(element);
   mouseWheelHandler(element);
   nativeScrollHandler(element);
-  selectionHandler(element);
+
+  if (i.settings.useSelectionScroll) {
+    selectionHandler(element);
+  }
 
   if (h.env.supportsTouch || h.env.supportsIePointer) {
     touchHandler(element, h.env.supportsTouch, h.env.supportsIePointer);
@@ -21140,7 +15198,7 @@ module.exports = function (element, userSettings) {
   updateGeometry(element);
 };
 
-},{"../lib/class":155,"../lib/helper":159,"./handler/click-rail":163,"./handler/drag-scrollbar":164,"./handler/keyboard":165,"./handler/mouse-wheel":166,"./handler/native-scroll":167,"./handler/selection":168,"./handler/touch":169,"./instances":171,"./update-geometry":172}],171:[function(require,module,exports){
+},{"../lib/class":124,"../lib/helper":128,"./handler/click-rail":132,"./handler/drag-scrollbar":133,"./handler/keyboard":134,"./handler/mouse-wheel":135,"./handler/native-scroll":136,"./handler/selection":137,"./handler/touch":138,"./instances":140,"./update-geometry":141}],140:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -21164,6 +15222,15 @@ function Instance(element) {
   i.contentHeight = null;
 
   i.isRtl = d.css(element, 'direction') === "rtl";
+  i.isNegativeScroll = (function () {
+    var originalScrollLeft = element.scrollLeft;
+    var result = null;
+    element.scrollLeft = -1;
+    result = element.scrollLeft < 0;
+    element.scrollLeft = originalScrollLeft;
+    return result;
+  })();
+  i.negativeScrollAdjustment = i.isNegativeScroll ? element.scrollWidth - element.clientWidth : 0;
   i.event = new EventManager();
   i.ownerDocument = element.ownerDocument || document;
 
@@ -21240,7 +15307,7 @@ exports.get = function (element) {
   return instances[getId(element)];
 };
 
-},{"../lib/dom":156,"../lib/event-manager":157,"../lib/guid":158,"../lib/helper":159,"./default-setting":161}],172:[function(require,module,exports){
+},{"../lib/dom":125,"../lib/event-manager":126,"../lib/guid":127,"../lib/helper":128,"./default-setting":130}],141:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -21249,7 +15316,8 @@ exports.get = function (element) {
 var cls = require('../lib/class')
   , d = require('../lib/dom')
   , h = require('../lib/helper')
-  , instances = require('./instances');
+  , instances = require('./instances')
+  , updateScroll = require('./update-scroll');
 
 function getThumbSize(i, thumbSize) {
   if (i.settings.minScrollbarLength) {
@@ -21264,7 +15332,7 @@ function getThumbSize(i, thumbSize) {
 function updateCss(element, i) {
   var xRailOffset = {width: i.railXWidth};
   if (i.isRtl) {
-    xRailOffset.left = element.scrollLeft + i.containerWidth - i.contentWidth;
+    xRailOffset.left = i.negativeScrollAdjustment + element.scrollLeft + i.containerWidth - i.contentWidth;
   } else {
     xRailOffset.left = element.scrollLeft;
   }
@@ -21278,13 +15346,13 @@ function updateCss(element, i) {
   var yRailOffset = {top: element.scrollTop, height: i.railYHeight};
   if (i.isScrollbarYUsingRight) {
     if (i.isRtl) {
-      yRailOffset.right = i.contentWidth - element.scrollLeft - i.scrollbarYRight - i.scrollbarYOuterWidth;
+      yRailOffset.right = i.contentWidth - (i.negativeScrollAdjustment + element.scrollLeft) - i.scrollbarYRight - i.scrollbarYOuterWidth;
     } else {
       yRailOffset.right = i.scrollbarYRight - element.scrollLeft;
     }
   } else {
     if (i.isRtl) {
-      yRailOffset.left = element.scrollLeft + i.containerWidth * 2 - i.contentWidth - i.scrollbarYLeft - i.scrollbarYOuterWidth;
+      yRailOffset.left = i.negativeScrollAdjustment + element.scrollLeft + i.containerWidth * 2 - i.contentWidth - i.scrollbarYLeft - i.scrollbarYOuterWidth;
     } else {
       yRailOffset.left = i.scrollbarYLeft + element.scrollLeft;
     }
@@ -21303,10 +15371,23 @@ module.exports = function (element) {
   i.contentWidth = element.scrollWidth;
   i.contentHeight = element.scrollHeight;
 
+  var existingRails;
   if (!element.contains(i.scrollbarXRail)) {
+    existingRails = d.queryChildren(element, '.ps-scrollbar-x-rail');
+    if (existingRails.length > 0) {
+      existingRails.forEach(function (rail) {
+        d.remove(rail);
+      });
+    }
     d.appendTo(i.scrollbarXRail, element);
   }
   if (!element.contains(i.scrollbarYRail)) {
+    existingRails = d.queryChildren(element, '.ps-scrollbar-y-rail');
+    if (existingRails.length > 0) {
+      existingRails.forEach(function (rail) {
+        d.remove(rail);
+      });
+    }
     d.appendTo(i.scrollbarYRail, element);
   }
 
@@ -21315,7 +15396,7 @@ module.exports = function (element) {
     i.railXWidth = i.containerWidth - i.railXMarginWidth;
     i.railXRatio = i.containerWidth / i.railXWidth;
     i.scrollbarXWidth = getThumbSize(i, h.toInt(i.railXWidth * i.containerWidth / i.contentWidth));
-    i.scrollbarXLeft = h.toInt(element.scrollLeft * (i.railXWidth - i.scrollbarXWidth) / (i.contentWidth - i.containerWidth));
+    i.scrollbarXLeft = h.toInt((i.negativeScrollAdjustment + element.scrollLeft) * (i.railXWidth - i.scrollbarXWidth) / (i.contentWidth - i.containerWidth));
   } else {
     i.scrollbarXActive = false;
     i.scrollbarXWidth = 0;
@@ -21333,7 +15414,7 @@ module.exports = function (element) {
     i.scrollbarYActive = false;
     i.scrollbarYHeight = 0;
     i.scrollbarYTop = 0;
-    element.scrollTop = 0;
+    updateScroll(element, 'top', 0);
   }
 
   if (i.scrollbarXLeft >= i.railXWidth - i.scrollbarXWidth) {
@@ -21349,7 +15430,114 @@ module.exports = function (element) {
   cls[i.scrollbarYActive ? 'add' : 'remove'](element, 'ps-active-y');
 };
 
-},{"../lib/class":155,"../lib/dom":156,"../lib/helper":159,"./instances":171}],173:[function(require,module,exports){
+},{"../lib/class":124,"../lib/dom":125,"../lib/helper":128,"./instances":140,"./update-scroll":142}],142:[function(require,module,exports){
+/* Copyright (c) 2015 Hyunje Alex Jun and other contributors
+ * Licensed under the MIT License
+ */
+'use strict';
+
+var instances = require('./instances');
+
+var upEvent = document.createEvent('Event')
+  , downEvent = document.createEvent('Event')
+  , leftEvent = document.createEvent('Event')
+  , rightEvent = document.createEvent('Event')
+  , yEvent = document.createEvent('Event')
+  , xEvent = document.createEvent('Event')
+  , xStartEvent = document.createEvent('Event')
+  , xEndEvent = document.createEvent('Event')
+  , yStartEvent = document.createEvent('Event')
+  , yEndEvent = document.createEvent('Event')
+  , lastTop
+  , lastLeft;
+
+upEvent.initEvent('ps-scroll-up', true, true);
+downEvent.initEvent('ps-scroll-down', true, true);
+leftEvent.initEvent('ps-scroll-left', true, true);
+rightEvent.initEvent('ps-scroll-right', true, true);
+yEvent.initEvent('ps-scroll-y', true, true);
+xEvent.initEvent('ps-scroll-x', true, true);
+xStartEvent.initEvent('ps-x-reach-start', true, true);
+xEndEvent.initEvent('ps-x-reach-end', true, true);
+yStartEvent.initEvent('ps-y-reach-start', true, true);
+yEndEvent.initEvent('ps-y-reach-end', true, true);
+
+module.exports = function (element, axis, value) {
+  if (typeof element === 'undefined') {
+    throw 'You must provide an element to the update-scroll function';
+  }
+
+  if (typeof axis === 'undefined') {
+    throw 'You must provide an axis to the update-scroll function';
+  }
+
+  if (typeof value === 'undefined') {
+    throw 'You must provide a value to the update-scroll function';
+  }
+
+  if (axis === 'top' && value <= 0) {
+    element.scrollTop = 0;
+    element.dispatchEvent(yStartEvent);
+    return; // don't allow negative scroll
+  }
+
+  if (axis === 'left' && value <= 0) {
+    element.scrollLeft = 0;
+    element.dispatchEvent(xStartEvent);
+    return; // don't allow negative scroll
+  }
+
+  var i = instances.get(element);
+
+  if (axis === 'top' && value > i.contentHeight - i.containerHeight) {
+    element.scrollTop = i.contentHeight - i.containerHeight;
+    element.dispatchEvent(yEndEvent);
+    return; // don't allow scroll past container
+  }
+
+  if (axis === 'left' && value > i.contentWidth - i.containerWidth) {
+    element.scrollLeft = i.contentWidth - i.containerWidth;
+    element.dispatchEvent(xEndEvent);
+    return; // don't allow scroll past container
+  }
+
+  if (!lastTop) {
+    lastTop = element.scrollTop;
+  }
+
+  if (!lastLeft) {
+    lastLeft = element.scrollLeft;
+  }
+
+  if (axis === 'top' && value < lastTop) {
+    element.dispatchEvent(upEvent);
+  }
+
+  if (axis === 'top' && value > lastTop) {
+    element.dispatchEvent(downEvent);
+  }
+
+  if (axis === 'left' && value < lastLeft) {
+    element.dispatchEvent(leftEvent);
+  }
+
+  if (axis === 'left' && value > lastLeft) {
+    element.dispatchEvent(rightEvent);
+  }
+
+  if (axis === 'top') {
+    element.scrollTop = lastTop = value;
+    element.dispatchEvent(yEvent);
+  }
+
+  if (axis === 'left') {
+    element.scrollLeft = lastLeft = value;
+    element.dispatchEvent(xEvent);
+  }
+
+};
+
+},{"./instances":140}],143:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -21362,6 +15550,13 @@ var d = require('../lib/dom')
 
 module.exports = function (element) {
   var i = instances.get(element);
+
+  if (!i) {
+    return;
+  }
+
+  // Recalcuate negative scrollLeft adjustment
+  i.negativeScrollAdjustment = i.isNegativeScroll ? element.scrollWidth - element.clientWidth : 0;
 
   // Recalculate rail margins
   d.css(i.scrollbarXRail, 'display', 'block');
@@ -21379,13 +15574,7 @@ module.exports = function (element) {
   d.css(i.scrollbarYRail, 'display', '');
 };
 
-},{"../lib/dom":156,"../lib/helper":159,"./instances":171,"./update-geometry":172}],"backbone":[function(require,module,exports){
-module.exports = window.Backbone;
-},{}],"jquery":[function(require,module,exports){
-module.exports = window.jQuery;
-},{}],"underscore":[function(require,module,exports){
-module.exports = window._;
-},{}]},{},[1])("underscore")
+},{"../lib/dom":125,"../lib/helper":128,"./instances":140,"./update-geometry":141}]},{},[4])(4)
 });
 //# sourceMappingURL=builder.map
 

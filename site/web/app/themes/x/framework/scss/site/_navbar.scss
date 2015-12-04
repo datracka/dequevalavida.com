@@ -72,16 +72,8 @@
 .x-brand {
   display: block;
   float: left;
-  font-family: $altFontFamily;
-  @include font-size(5.4);
-  font-weight: $navbarBrandFontWeight;
   line-height: 1;
-  color: $navbarBrandColor;
-
-  &:hover {
-    text-decoration: none;
-    color: $navbarBrandColor;
-  }
+  text-decoration: none;
 }
 
 .masthead-stacked {

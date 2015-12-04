@@ -65,10 +65,6 @@
 /* Navbar
 // ========================================================================== */
 
-.x-navbar {
-  font-size: <?php echo $x_navbar_font_size . 'px'; ?>;
-}
-
 <?php if ( $x_navbar_positioning == 'fixed-left' || $x_navbar_positioning == 'fixed-right' ) : ?>
 
   .x-navbar {
@@ -119,22 +115,32 @@
 // ========================================================================== */
 
 .x-brand {
+  <?php if ( ( $x_navbar_positioning == 'static-top' || $x_navbar_positioning == 'fixed-top' ) && $x_logo_navigation_layout == 'inline' ) : ?>
+    margin-top: <?php echo $x_logo_adjust_navbar_top . 'px'; ?>;
+  <?php endif; ?>
+  <?php if ( $x_navbar_positioning == 'fixed-left' || $x_navbar_positioning == 'fixed-right' ) : ?>
+    margin-top: <?php echo $x_logo_adjust_navbar_side . 'px'; ?>;
+  <?php endif; ?>
+  font-family: <?php echo $x_logo_font_stack; ?>;
   font-size: <?php echo $x_logo_font_size . 'px'; ?>;
-  font-size: <?php echo $x_logo_font_size / 10 . 'rem'; ?>;
+  font-style: <?php echo ( $x_logo_font_is_italic ) ? 'italic' : 'normal'; ?>;
+  font-weight: <?php echo $x_logo_font_weight; ?>;
+  letter-spacing: <?php echo $x_logo_letter_spacing . 'em'; ?>;
+  <?php if ( $x_logo_uppercase_enable == '1' ) : ?>
+    text-transform: uppercase;
+  <?php endif; ?>
+  color: <?php echo $x_logo_font_color; ?>;
 }
 
-<?php if ( $x_navbar_positioning == 'static-top' || $x_navbar_positioning == 'fixed-top' ) : ?>
+.x-brand:hover,
+.x-brand:focus {
+  color: <?php echo $x_logo_font_color; ?>;
+}
 
-  .x-navbar .x-brand {
-    margin-top: <?php echo $x_logo_adjust_navbar_top . 'px'; ?>;
-  }
+<?php if ( $x_logo_width != '' ) : ?>
 
-<?php endif; ?>
-
-<?php if ( $x_navbar_positioning == 'fixed-left' || $x_navbar_positioning == 'fixed-right' ) : ?>
-
-  .x-navbar .x-brand {
-    margin-top: <?php echo $x_logo_adjust_navbar_side . 'px'; ?>;
+  .x-brand img {
+    width: <?php echo $x_logo_width / 2 . 'px'; ?>;
   }
 
 <?php endif; ?>
@@ -145,12 +151,17 @@
 // ========================================================================== */
 
 .x-navbar .x-nav-wrap .x-nav > li > a {
+  font-family: <?php echo $x_navbar_font_stack; ?>;
   font-style: <?php echo ( $x_navbar_font_is_italic ) ? 'italic' : 'normal'; ?>;
   font-weight: <?php echo $x_navbar_font_weight; ?>;
-  letter-spacing: <?php echo $x_navbar_letter_spacing . 'px'; ?>;
-  <?php if ( x_get_option( 'x_navbar_uppercase_enable', '' ) == '1' ) : ?>
+  letter-spacing: <?php echo $x_navbar_letter_spacing . 'em'; ?>;
+  <?php if ( x_get_option( 'x_navbar_uppercase_enable' ) == '1' ) : ?>
     text-transform: uppercase;
   <?php endif; ?>
+}
+
+.x-navbar .desktop .x-nav > li > a {
+  font-size: <?php echo $x_navbar_font_size . 'px'; ?>;
 }
 
 <?php if ( $x_navbar_positioning == 'static-top' || $x_navbar_positioning == 'fixed-top' ) : ?>
@@ -165,13 +176,13 @@
 <?php if ( $x_stack != 'icon' ) : ?>
 
   .x-navbar .desktop .x-nav > li > a > span {
-    margin-right: -<?php echo $x_navbar_letter_spacing . 'px'; ?>;
+    margin-right: -<?php echo $x_navbar_letter_spacing . 'em'; ?>;
   }
 
 <?php else : ?>
 
   .x-navbar .desktop .x-nav > li > a > span {
-    padding-right: calc(1.25em - <?php echo $x_navbar_letter_spacing . 'px'; ?>);
+    padding-right: calc(1.25em - <?php echo $x_navbar_letter_spacing . 'em'; ?>);
   }
 
 <?php endif; ?>
@@ -203,8 +214,22 @@
       width: auto;
     }
 
-    .x-navbar .x-brand {
+    .x-navbar .x-navbar-inner > .x-container.width {
+      width: <?php echo $x_layout_site_width . '%'; ?>;
+    }
+
+    .x-brand {
       margin-top: <?php echo $x_logo_adjust_navbar_top . 'px'; ?>;
+    }
+
+  <?php endif; ?>
+
+  <?php if ( $x_navbar_positioning == 'fixed-top' && $x_layout_site == 'boxed' ) : ?>
+
+    .x-navbar.x-navbar-fixed-top.x-container.max.width {
+      left: 0;
+      right: 0;
+      width: 100%;
     }
 
   <?php endif; ?>
@@ -216,5 +241,10 @@
     }
 
   <?php endif; ?>
+
+  .x-widgetbar {
+    left: 0;
+    right: 0;
+  }
 
 }

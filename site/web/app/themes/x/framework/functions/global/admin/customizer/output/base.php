@@ -14,9 +14,8 @@
 //   03. Headings
 //   04. Container Sizing
 //   05. Content
-//   06. Navbar - Brand
-//   07. Custom Fonts
-//   08. Custom Fonts - Colors
+//   06. Custom Fonts
+//   07. Custom Fonts - Colors
 // =============================================================================
 
 ?>
@@ -28,9 +27,7 @@ body {
   font-size: <?php echo $x_body_font_size . 'px'; ?>;
   font-style: <?php echo ( $x_body_font_is_italic ) ? 'italic' : 'normal'; ?>;
   font-weight: <?php echo $x_body_font_weight; ?>;
-  <?php if ( $x_body_font_color_enable == '1' ) : ?>
-    color: <?php echo $x_body_font_color; ?>;
-  <?php endif; ?>
+  color: <?php echo $x_body_font_color; ?>;
   <?php if ( $x_design_bg_image_pattern == '' ) : ?>
     background-color: <?php echo $x_design_bg_color; ?>;
   <?php else : ?>
@@ -60,12 +57,36 @@ input[type="checkbox"]:focus {
 // ========================================================================== */
 
 h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
+  font-family: <?php echo $x_headings_font_stack; ?>;
   font-style: <?php echo ( $x_headings_font_is_italic ) ? 'italic' : 'normal'; ?>;
   font-weight: <?php echo $x_headings_font_weight; ?>;
-  letter-spacing: <?php echo $x_headings_letter_spacing . 'px'; ?>;
   <?php if ( $x_headings_uppercase_enable == '1' ) : ?>
     text-transform: uppercase;
   <?php endif; ?>
+}
+
+h1, .h1 {
+  letter-spacing: <?php echo $x_h1_letter_spacing . 'em'; ?>;
+}
+
+h2, .h2 {
+  letter-spacing: <?php echo $x_h2_letter_spacing . 'em'; ?>;
+}
+
+h3, .h3 {
+  letter-spacing: <?php echo $x_h3_letter_spacing . 'em'; ?>;
+}
+
+h4, .h4 {
+  letter-spacing: <?php echo $x_h4_letter_spacing . 'em'; ?>;
+}
+
+h5, .h5 {
+  letter-spacing: <?php echo $x_h5_letter_spacing . 'em'; ?>;
+}
+
+h6, .h6 {
+  letter-spacing: <?php echo $x_h6_letter_spacing . 'em'; ?>;
 }
 
 .w-h {
@@ -86,6 +107,11 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
 }
 
 <?php if ( $x_layout_site == 'boxed' ) : ?>
+
+  /*
+  // The navbar container width property is overwritten in a responsive
+  // breakpoint in the masthead.php output file.
+  */
 
   .site,
   .x-navbar.x-navbar-fixed-top.x-container.max.width {
@@ -125,54 +151,16 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
 
 
 
-/* Navbar - Brand
-// ========================================================================== */
-
-.x-brand {
-  font-style: <?php echo ( $x_logo_font_is_italic ) ? 'italic' : 'normal'; ?>;
-  font-weight: <?php echo $x_logo_font_weight; ?>;
-  letter-spacing: <?php echo $x_logo_letter_spacing . 'px'; ?>;
-  <?php if ( $x_logo_uppercase_enable == '1' ) : ?>
-    text-transform: uppercase;
-  <?php endif; ?>
-}
-
-<?php if ( $x_logo_width != '' ) : ?>
-
-  .x-brand img {
-    width: <?php echo $x_logo_width / 2 . 'px'; ?>;
-  }
-
-<?php endif; ?>
-
-
-
 /* Custom Fonts
 // ========================================================================== */
 
-<?php if ( $x_custom_fonts == '1' ) : ?>
-
-  body,
-  input,
-  button,
-  select,
-  textarea {
-    font-family: "<?php echo $x_body_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;
-  }
-
-  h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
-    font-family: "<?php echo $x_headings_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;
-  }
-
-  .x-brand {
-    font-family: "<?php echo $x_logo_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;
-  }
-
-  .x-navbar .x-nav > li > a {
-    font-family: "<?php echo $x_navbar_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;
-  }
-
-<?php endif; ?>
+body,
+input,
+button,
+select,
+textarea {
+  font-family: <?php echo $x_body_font_stack; ?>;
+}
 
 
 
@@ -183,30 +171,22 @@ h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6 {
 // Headings.
 */
 
-<?php if ( $x_headings_font_color_enable == '1' ) : ?>
+h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, .h1 a, .h2 a, .h3 a, .h4 a, .h5 a, .h6 a, blockquote {
+  color: <?php echo $x_headings_font_color; ?>;
+}
 
-  h1, h2, h3, h4, h5, h6, .h1, .h2, .h3, .h4, .h5, .h6, h1 a, h2 a, h3 a, h4 a, h5 a, h6 a, .h1 a, .h2 a, .h3 a, .h4 a, .h5 a, .h6 a, blockquote {
-    color: <?php echo $x_headings_font_color; ?>;
-  }
-
-  .cfc-h-tx { color:            <?php echo $x_headings_font_color; ?> !important; }
-  .cfc-h-bd { border-color:     <?php echo $x_headings_font_color; ?> !important; }
-  .cfc-h-bg { background-color: <?php echo $x_headings_font_color; ?> !important; }
-
-<?php endif; ?>
+.cfc-h-tx { color:            <?php echo $x_headings_font_color; ?> !important; }
+.cfc-h-bd { border-color:     <?php echo $x_headings_font_color; ?> !important; }
+.cfc-h-bg { background-color: <?php echo $x_headings_font_color; ?> !important; }
 
 
 /*
 // Body.
 */
 
-<?php if ( $x_body_font_color_enable == '1' ) : ?>
-
-  .cfc-b-tx { color:            <?php echo $x_body_font_color; ?> !important; }
-  .cfc-b-bd { border-color:     <?php echo $x_body_font_color; ?> !important; }
-  .cfc-b-bg { background-color: <?php echo $x_body_font_color; ?> !important; }
-
-<?php endif; ?>
+.cfc-b-tx { color:            <?php echo $x_body_font_color; ?> !important; }
+.cfc-b-bd { border-color:     <?php echo $x_body_font_color; ?> !important; }
+.cfc-b-bg { background-color: <?php echo $x_body_font_color; ?> !important; }
 
 
 /*

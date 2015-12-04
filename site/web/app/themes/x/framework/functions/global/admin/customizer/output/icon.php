@@ -27,14 +27,14 @@
 //   16. Adminbar Styling
 // =============================================================================
 
-$x_icon_post_title_icon_enable      = x_get_option( 'x_icon_post_title_icon_enable', '1' );
-$x_icon_post_standard_colors_enable = x_get_option( 'x_icon_post_standard_colors_enable', '' );
-$x_icon_post_image_colors_enable    = x_get_option( 'x_icon_post_image_colors_enable', '' );
-$x_icon_post_gallery_colors_enable  = x_get_option( 'x_icon_post_gallery_colors_enable', '' );
-$x_icon_post_video_colors_enable    = x_get_option( 'x_icon_post_video_colors_enable', '' );
-$x_icon_post_audio_colors_enable    = x_get_option( 'x_icon_post_audio_colors_enable', '' );
-$x_icon_post_quote_colors_enable    = x_get_option( 'x_icon_post_quote_colors_enable', '' );
-$x_icon_post_link_colors_enable     = x_get_option( 'x_icon_post_link_colors_enable', '' );
+$x_icon_post_title_icon_enable      = x_get_option( 'x_icon_post_title_icon_enable' );
+$x_icon_post_standard_colors_enable = x_get_option( 'x_icon_post_standard_colors_enable' );
+$x_icon_post_image_colors_enable    = x_get_option( 'x_icon_post_image_colors_enable' );
+$x_icon_post_gallery_colors_enable  = x_get_option( 'x_icon_post_gallery_colors_enable' );
+$x_icon_post_video_colors_enable    = x_get_option( 'x_icon_post_video_colors_enable' );
+$x_icon_post_audio_colors_enable    = x_get_option( 'x_icon_post_audio_colors_enable' );
+$x_icon_post_quote_colors_enable    = x_get_option( 'x_icon_post_quote_colors_enable' );
+$x_icon_post_link_colors_enable     = x_get_option( 'x_icon_post_link_colors_enable' );
 
 ?>
 
@@ -654,19 +654,15 @@ input[type="color"]:focus,
 /* Custom Fonts
 // ========================================================================== */
 
-<?php if ( $x_custom_fonts == '1' ) : ?>
-
-  .x-comment-author,
-  .x-comment-time,
-  .comment-form-author label,
-  .comment-form-email label,
-  .comment-form-url label,
-  .comment-form-rating label,
-  .comment-form-comment label {
-    font-family: "<?php echo $x_headings_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;;
-  }
-
-<?php endif; ?>
+.x-comment-author,
+.x-comment-time,
+.comment-form-author label,
+.comment-form-email label,
+.comment-form-url label,
+.comment-form-rating label,
+.comment-form-comment label {
+  font-family: "<?php echo $x_headings_font_family; ?>", "Helvetica Neue", Helvetica, sans-serif;;
+}
 
 
 
@@ -674,43 +670,25 @@ input[type="color"]:focus,
 // ========================================================================== */
 
 /*
-// Brand.
-*/
-
-<?php if ( $x_logo_font_color_enable == '1' ) : ?>
-
-  .x-brand,
-  .x-brand:hover {
-    color: <?php echo $x_logo_font_color; ?>;
-  }
-
-<?php endif; ?>
-
-
-/*
 // Body.
 */
 
-<?php if ( $x_body_font_color_enable == '1' ) : ?>
+.x-comment-time,
+.entry-thumb:before,
+.p-meta {
+  color: <?php echo $x_body_font_color; ?>;
+}
 
-  .x-comment-time,
-  .entry-thumb:before,
-  .p-meta {
+<?php if ( X_WOOCOMMERCE_IS_ACTIVE ) : ?>
+
+  .woocommerce .price > .from,
+  .woocommerce .price > del,
+  .woocommerce p.stars span a:after,
+  .woocommerce-page .price > .from,
+  .woocommerce-page .price > del,
+  .woocommerce-page p.stars span a:after {
     color: <?php echo $x_body_font_color; ?>;
   }
-
-  <?php if ( X_WOOCOMMERCE_IS_ACTIVE ) : ?>
-
-    .woocommerce .price > .from,
-    .woocommerce .price > del,
-    .woocommerce p.stars span a:after,
-    .woocommerce-page .price > .from,
-    .woocommerce-page .price > del,
-    .woocommerce-page p.stars span a:after {
-      color: <?php echo $x_body_font_color; ?>;
-    }
-
-  <?php endif; ?>
 
 <?php endif; ?>
 
@@ -719,32 +697,28 @@ input[type="color"]:focus,
 // Headings.
 */
 
-<?php if ( $x_headings_font_color_enable == '1' ) : ?>
+.entry-title a:hover,
+.x-comment-author,
+.x-comment-author a,
+.comment-form-author label,
+.comment-form-email label,
+.comment-form-url label,
+.comment-form-rating label,
+.comment-form-comment label,
+.x-accordion-heading .x-accordion-toggle,
+.x-nav-tabs > li > a:hover,
+.x-nav-tabs > .active > a,
+.x-nav-tabs > .active > a:hover,
+.mejs-button button {
+  color: <?php echo $x_headings_font_color; ?>;
+}
 
-  .entry-title a:hover,
-  .x-comment-author,
-  .x-comment-author a,
-  .comment-form-author label,
-  .comment-form-email label,
-  .comment-form-url label,
-  .comment-form-rating label,
-  .comment-form-comment label,
-  .x-accordion-heading .x-accordion-toggle,
-  .x-nav-tabs > li > a:hover,
-  .x-nav-tabs > .active > a,
-  .x-nav-tabs > .active > a:hover,
-  .mejs-button button {
-    color: <?php echo $x_headings_font_color; ?>;
-  }
-
-  .h-comments-title small,
-  .h-feature-headline span i,
-  .x-portfolio-filters-menu,
-  .mejs-time-loaded {
-    background-color: <?php echo $x_headings_font_color; ?> !important;
-  }
-
-<?php endif; ?>
+.h-comments-title small,
+.h-feature-headline span i,
+.x-portfolio-filters-menu,
+.mejs-time-loaded {
+  background-color: <?php echo $x_headings_font_color; ?> !important;
+}
 
 
 
@@ -792,28 +766,6 @@ input[type="color"]:focus,
 
   <?php endif; ?>
 
-  <?php if ( $x_navbar_positioning == 'fixed-top' && $x_layout_site == 'boxed' ) : ?>
-
-    .x-navbar.x-navbar-fixed-top.x-container.max.width {
-      left: 0;
-      right: 0;
-      width: 100%;
-    }
-
-  <?php endif; ?>
-
-  <?php if ( $x_navbar_positioning == 'fixed-left' || $x_navbar_positioning == 'fixed-right' ) : ?>
-
-    .x-navbar .x-navbar-inner > .x-container.width {
-      width: <?php echo $x_layout_site_width . '%'; ?>;
-    }
-
-  <?php endif; ?>
-
-  .x-widgetbar {
-    left: 0;
-    right: 0;
-  }
 }
 
 

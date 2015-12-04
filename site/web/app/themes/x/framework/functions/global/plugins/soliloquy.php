@@ -15,7 +15,7 @@
 // Remove License Functionality
 // =============================================================================
 
-if ( ! function_exists( 'x_soliloquy_remove_license_functionality' ) ) {
+if ( ! function_exists( 'x_soliloquy_remove_license_functionality' ) ) :
 
   function x_soliloquy_remove_license_functionality() {
 
@@ -35,4 +35,4 @@ if ( ! function_exists( 'x_soliloquy_remove_license_functionality' ) ) {
 
   add_action( 'init', 'x_soliloquy_remove_license_functionality', 9999 );
 
-}
+endif;

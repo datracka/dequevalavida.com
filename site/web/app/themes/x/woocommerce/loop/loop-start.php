@@ -8,7 +8,7 @@
 
 ?>
 
-<?php $columns      = x_get_option( 'x_woocommerce_shop_columns', '3' ); ?>
+<?php $columns      = x_get_option( 'x_woocommerce_shop_columns' ); ?>
 <?php $column_class = ( is_shop() || is_product_category() || is_product_tag() ) ? ' cols-' . $columns : ''; ?>
 
 <ul class="products<?php echo $column_class; ?>">

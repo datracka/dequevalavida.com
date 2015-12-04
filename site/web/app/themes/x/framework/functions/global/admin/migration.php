@@ -123,6 +123,81 @@ function x_version_migration() {
 
 
     //
+    // If $prior is less than 4.2.0.
+    //
+
+    if ( version_compare( $prior, '4.2.0', '<' ) ) {
+
+      $stack        = get_option( 'x_stack' );
+      $design       = get_option( 'x_integrity_design' );
+      $h_base       = ( intval( get_option( 'x_body_font_size', 14 ) ) + intval( get_option( 'x_content_font_size', 14 ) ) ) / 2;
+      $h1_font_size = $h_base * 4;
+      $h2_font_size = $h_base * 2.857;
+      $h3_font_size = $h_base * 2.285;
+      $h4_font_size = $h_base * 1.714;
+      $h5_font_size = $h_base * 1.5;
+      $h6_font_size = $h_base * 1;
+
+      if ( $stack == 'integrity' && $design == 'dark' ) {
+        $logo_font_color     = '#ffffff';
+        $headings_font_color = '#ffffff';
+        $body_font_color     = '#666666';
+      } else if ( $stack == 'renew' ) {
+        $logo_font_color     = '#ffffff';
+        $headings_font_color = '#2c3e50';
+        $body_font_color     = '#28323f';
+      } else if ( $stack == 'icon' ) {
+        $logo_font_color     = '#566471';
+        $headings_font_color = '#566471';
+        $body_font_color     = '#566471';
+      } else if ( $stack == 'ethos' ) {
+        $logo_font_color     = '#ffffff';
+        $headings_font_color = '#333333';
+        $body_font_color     = '#7a7a7a';
+      } else {
+        $logo_font_color     = '#272727';
+        $headings_font_color = '#272727';
+        $body_font_color     = '#7a7a7a';
+      }
+
+      $logo_font_color                = ( get_option( 'x_logo_font_color_enable' ) == '1' ) ? get_option( 'x_logo_font_color' ) : $logo_font_color;
+      $headings_font_color            = ( get_option( 'x_headings_font_color_enable' ) == '1' ) ? get_option( 'x_headings_font_color' ) : $headings_font_color;
+      $body_font_color                = ( get_option( 'x_body_font_color_enable' ) == '1' ) ? get_option( 'x_body_font_color' ) : $body_font_color;
+      $px_to_em_letter_spacing_logo   = round( intval( get_option( 'x_logo_letter_spacing', 1 ) ) / intval( get_option( 'x_logo_font_size', 54 ) ), 3 );
+      $px_to_em_letter_spacing_navbar = round( intval( get_option( 'x_navbar_letter_spacing', 1 ) ) / intval( get_option( 'x_navbar_font_size', 12 ) ), 3 );
+      $px_to_em_letter_spacing_h1     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h1_font_size, 3 );
+      $px_to_em_letter_spacing_h2     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h2_font_size, 3 );
+      $px_to_em_letter_spacing_h3     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h3_font_size, 3 );
+      $px_to_em_letter_spacing_h4     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h4_font_size, 3 );
+      $px_to_em_letter_spacing_h5     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h5_font_size, 3 );
+      $px_to_em_letter_spacing_h6     = round( intval( get_option( 'x_headings_letter_spacing', 1 ) ) / $h6_font_size, 3 );
+
+      $updated = array(
+        'x_google_fonts_subsets'           => get_option( 'x_custom_font_subsets' ),
+        'x_google_fonts_subset_cyrillic'   => get_option( 'x_custom_font_subset_cyrillic' ),
+        'x_google_fonts_subset_greek'      => get_option( 'x_custom_font_subset_greek' ),
+        'x_google_fonts_subset_vietnamese' => get_option( 'x_custom_font_subset_vietnamese' ),
+        'x_logo_font_color'                => $logo_font_color,
+        'x_logo_letter_spacing'            => $px_to_em_letter_spacing_logo,
+        'x_navbar_letter_spacing'          => $px_to_em_letter_spacing_navbar,
+        'x_headings_font_color'            => $headings_font_color,
+        'x_h1_letter_spacing'              => $px_to_em_letter_spacing_h1,
+        'x_h2_letter_spacing'              => $px_to_em_letter_spacing_h2,
+        'x_h3_letter_spacing'              => $px_to_em_letter_spacing_h3,
+        'x_h4_letter_spacing'              => $px_to_em_letter_spacing_h4,
+        'x_h5_letter_spacing'              => $px_to_em_letter_spacing_h5,
+        'x_h6_letter_spacing'              => $px_to_em_letter_spacing_h6,
+        'x_body_font_color'                => $body_font_color
+      );
+
+      foreach ( $updated as $key => $value ) {
+        update_option( $key, $value );
+      }
+
+    }
+
+
+    //
     // Update stored version number.
     //
 
@@ -134,6 +209,13 @@ function x_version_migration() {
     //
 
     update_option( 'x_version_migration_notice', true );
+
+
+    //
+    // Bust caches.
+    //
+
+    x_bust_google_fonts_cache();
 
   }
 
@@ -256,7 +338,7 @@ function x_split_shared_term_migration( $term_id, $new_term_id, $term_taxonomy_i
       }
     }
 
-    update_option( 'x_ethos_filterable_index_categories', implode(', ', $setting) );
+    update_option( 'x_ethos_filterable_index_categories', implode( ', ', $setting ) );
 
   }
 

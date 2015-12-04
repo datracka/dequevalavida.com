@@ -8,7 +8,7 @@
 
 ?>
 
-<?php if ( x_get_option( 'x_topbar_display', '' ) == '1' ) : ?>
+<?php if ( x_get_option( 'x_topbar_display' ) == '1' ) : ?>
 
   <div class="x-topbar">
     <div class="x-topbar-inner x-container max width">

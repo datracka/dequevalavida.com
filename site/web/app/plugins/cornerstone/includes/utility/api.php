@@ -6,16 +6,21 @@
  * The processes represented here are otherwise handled internally.
  */
 
+/**
+ * Register a new element
+ * @param  $class_name Name of the class you've created in definition.php
+ * @param  $name       slug name of the element. "alert" for example.
+ * @param  $path       Path to the folder containing a definition.php file.
+ */
+function cornerstone_register_element( $class_name, $name, $path ) {
+	CS()->component('Element_Orchestrator')->add( $class_name, $name, $path );
+}
 
 /**
- * Add a new Element to the Builder interface
- * Remember that elements must inherit from Cornerstone_Element_Base
- * This should be called from the cornerstone_load_elements action
- * @param  string $class_name Name of class for the custom element
- * @return none
+ * Deprecated
  */
 function cornerstone_add_element( $class_name ) {
-	CS()->elements()->add( $class_name );
+	CS()->component( 'Legacy_Elements' )->add( $class_name ); // TODO
 }
 
 /**
@@ -24,7 +29,8 @@ function cornerstone_add_element( $class_name ) {
  * @return none
  */
 function cornerstone_remove_element( $name ) {
-	CS()->elements()->remove( $name );
+	CS()->component( 'Element_Orchestrator' )->remove( $name );
+	CS()->component( 'Legacy_Elements' )->remove( $name );
 }
 
 /**
@@ -35,7 +41,7 @@ function cornerstone_remove_element( $name ) {
  * @return  none
  */
 function cornerstone_register_integration( $name, $class_name ) {
-	CS()->integrations()->register( $name, $class_name );
+	CS()->component( 'Integration_Manager' )->register( $name, $class_name );
 }
 
 /**
@@ -46,5 +52,5 @@ function cornerstone_register_integration( $name, $class_name ) {
  * @return  none
  */
 function cornerstone_unregister_integration( $name ) {
-	CS()->integrations()->unregister( $name );
+	CS()->component( 'Integration_Manager' )->unregister( $name );
 }

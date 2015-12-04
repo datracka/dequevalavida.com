@@ -13,7 +13,7 @@
 // Box Sizing Reset
 // =============================================================================
 
-.x-content-band,
-.x-content-band * {
+.x-section,
+.x-section * {
   @include box-sizing(border-box);
 }

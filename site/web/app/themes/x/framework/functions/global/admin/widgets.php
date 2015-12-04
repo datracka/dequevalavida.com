@@ -19,7 +19,7 @@
 if ( ! function_exists( 'x_header_widget_areas_count' ) ) :
   function x_header_widget_areas_count() {
 
-    return x_get_option( 'x_header_widget_areas', '2' );
+    return x_get_option( 'x_header_widget_areas' );
 
   }
 endif;
@@ -27,7 +27,7 @@ endif;
 if ( ! function_exists( 'x_footer_widget_areas_count' ) ) :
   function x_footer_widget_areas_count() {
 
-    return x_get_option( 'x_footer_widget_areas', '3' );
+    return x_get_option( 'x_footer_widget_areas' );
 
   }
 endif;

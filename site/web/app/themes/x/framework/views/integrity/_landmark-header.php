@@ -12,7 +12,7 @@ $disable_filters    = get_post_meta( get_the_ID(), '_x_portfolio_disable_filteri
 
 ?>
 
-<?php if ( is_home() && x_get_option( 'x_integrity_blog_header_enable', '1' ) == '1' ) : ?>
+<?php if ( is_home() && x_get_option( 'x_integrity_blog_header_enable' ) == '1' ) : ?>
 
   <header class="x-header-landmark x-container max width">
     <h1 class="h-landmark"><span><?php echo x_get_option( 'x_integrity_blog_title' ); ?></span></h1>
@@ -125,7 +125,7 @@ $disable_filters    = get_post_meta( get_the_ID(), '_x_portfolio_disable_filteri
     </header>
 
   <?php endif; ?>
-<?php elseif ( x_is_shop() && x_get_option( 'x_integrity_shop_header_enable', '1' ) == '1' ) : ?>
+<?php elseif ( x_is_shop() && x_get_option( 'x_integrity_shop_header_enable' ) == '1' ) : ?>
 
   <header class="x-header-landmark x-container max width">
     <h1 class="h-landmark"><span><?php echo x_get_option( 'x_integrity_shop_title' ); ?></span></h1>

@@ -42,7 +42,7 @@ require('./jquery.cs-code-editor');
 
   function invalidEl( el ) {
     if ( el.is('textarea') ) return false;
-    console.log('csCodeEditor can only be applied to textarea elements.');
+    console.warn('csCodeEditor can only be applied to textarea elements.');
     return true;
   }
 
@@ -15086,13 +15086,7 @@ if (!CodeMirror.mimeModes.hasOwnProperty("text/html"))
 
 });
 
-},{"../../lib/codemirror":26}],"backbone":[function(require,module,exports){
-module.exports = window.Backbone;
-},{}],"jquery":[function(require,module,exports){
-module.exports = window.jQuery;
-},{}],"underscore":[function(require,module,exports){
-module.exports = window._;
-},{}]},{},[1])("underscore")
+},{"../../lib/codemirror":26}]},{},[1])(1)
 });
 //# sourceMappingURL=code-editor.map
 

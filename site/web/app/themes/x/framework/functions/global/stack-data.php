@@ -42,7 +42,7 @@ endif;
 if ( ! function_exists( 'x_get_stack' ) ) :
   function x_get_stack() {
 
-    return x_get_option( 'x_stack', 'integrity' );
+    return x_get_option( 'x_stack' );
 
   }
 endif;
@@ -55,7 +55,7 @@ endif;
 if ( ! function_exists( 'x_get_site_layout' ) ) :
   function x_get_site_layout() {
 
-    return x_get_option( 'x_layout_site', 'full-width' );
+    return x_get_option( 'x_layout_site' );
 
   }
 endif;
@@ -74,11 +74,11 @@ endif;
 if ( ! function_exists( 'x_get_content_layout' ) ) :
   function x_get_content_layout() {
 
-    $content_layout = x_get_option( 'x_layout_content', 'content-sidebar' );
+    $content_layout = x_get_option( 'x_layout_content' );
 
     if ( $content_layout != 'full-width' ) {
       if ( is_home() ) {
-        $opt    = x_get_option( 'x_blog_layout', 'sidebar' );
+        $opt    = x_get_option( 'x_blog_layout' );
         $layout = ( $opt == 'sidebar' ) ? $content_layout : $opt;
       } elseif ( is_singular( 'post' ) ) {
         $meta   = get_post_meta( get_the_ID(), '_x_post_layout', true );
@@ -96,19 +96,19 @@ if ( ! function_exists( 'x_get_content_layout' ) ) :
         $layout = 'full-width';
       } elseif ( is_archive() ) {
         if ( x_is_shop() || x_is_product_category() || x_is_product_tag() ) {
-          $opt    = x_get_option( 'x_woocommerce_shop_layout_content', 'sidebar' );
+          $opt    = x_get_option( 'x_woocommerce_shop_layout_content' );
           $layout = ( $opt == 'sidebar' ) ? $content_layout : $opt;
         } else {
-          $opt    = x_get_option( 'x_archive_layout', 'sidebar' );
+          $opt    = x_get_option( 'x_archive_layout' );
           $layout = ( $opt == 'sidebar' ) ? $content_layout : $opt;
         }
       } elseif ( x_is_product() ) {
         $layout = 'full-width';
       } elseif ( x_is_bbpress() ) {
-        $opt    = x_get_option( 'x_bbpress_layout_content', 'sidebar' );
+        $opt    = x_get_option( 'x_bbpress_layout_content' );
         $layout = ( $opt == 'sidebar' ) ? $content_layout : $opt;
       } elseif ( x_is_buddypress() ) {
-        $opt    = x_get_option( 'x_buddypress_layout_content', 'sidebar' );
+        $opt    = x_get_option( 'x_buddypress_layout_content' );
         $layout = ( $opt == 'sidebar' ) ? $content_layout : $opt;
       } elseif ( is_404() ) {
         $layout = 'full-width';
@@ -129,13 +129,16 @@ endif;
 // Define Constants
 // =============================================================================
 
-define( 'X_VERSION', '4.1.1' );
+define( 'X_VERSION', '4.2.2' );
 define( 'X_TEMPLATE_PATH', get_template_directory() );
 define( 'X_TEMPLATE_URL', get_template_directory_uri() );
 define( 'X_BBPRESS_IS_ACTIVE', class_exists( 'bbPress' ) );
 define( 'X_BUDDYPRESS_IS_ACTIVE', class_exists( 'BuddyPress' ) );
 define( 'X_CONTACT_FORM_7_IS_ACTIVE', class_exists( 'WPCF7_ContactForm' ) );
+define( 'X_ENVIRA_GALLERY_IS_ACTIVE', class_exists( 'Envira_Gallery' ) );
+define( 'X_ESSENTIAL_GRID_IS_ACTIVE', class_exists( 'Essential_Grid' ) );
 define( 'X_GRAVITY_FORMS_IS_ACTIVE', class_exists( 'GFForms' ) );
+define( 'X_LAYERSLIDER_IS_ACTIVE', class_exists( 'LS_Sliders' ) );
 define( 'X_REVOLUTION_SLIDER_IS_ACTIVE', class_exists( 'RevSlider' ) );
 define( 'X_SOLILOQUY_IS_ACTIVE', class_exists( 'Soliloquy' ) );
 define( 'X_VISUAL_COMOPSER_IS_ACTIVE', defined( 'WPB_VC_VERSION' ) );
@@ -239,38 +242,26 @@ $customizer_settings_data = array(
   'x_design_bg_image_pattern'                           => '',
   'x_design_bg_image_full'                              => '',
   'x_design_bg_image_full_fade'                         => '750',
-  'x_custom_fonts'                                      => '',
-  'x_custom_font_subsets'                               => '',
-  'x_custom_font_subset_cyrillic'                       => '',
-  'x_custom_font_subset_greek'                          => '',
-  'x_custom_font_subset_vietnamese'                     => '',
-  'x_logo_font_family'                                  => 'lato',
-  'x_logo_font_color_enable'                            => '',
-  'x_logo_font_color'                                   => '#999999',
-  'x_logo_font_size'                                    => '54',
-  'x_logo_font_weight'                                  => '400',
-  'x_logo_letter_spacing'                               => '-3',
-  'x_logo_uppercase_enable'                             => '',
-  'x_navbar_font_family'                                => 'lato',
-  'x_navbar_link_color'                                 => '#b7b7b7',
-  'x_navbar_link_color_hover'                           => '#272727',
-  'x_navbar_font_size'                                  => '12',
-  'x_navbar_font_weight'                                => '400',
-  'x_navbar_letter_spacing'                             => '1',
-  'x_navbar_uppercase_enable'                           => '',
-  'x_headings_font_family'                              => 'lato',
-  'x_headings_font_color_enable'                        => '',
-  'x_headings_font_color'                               => '#99999',
-  'x_headings_font_weight'                              => '400',
-  'x_headings_letter_spacing'                           => '-1',
-  'x_headings_uppercase_enable'                         => '',
-  'x_headings_widget_icons_enable'                      => '',
-  'x_body_font_family'                                  => 'lato',
-  'x_body_font_color_enable'                            => '',
+  'x_google_fonts_subsets'                              => '',
+  'x_google_fonts_subset_cyrillic'                      => '',
+  'x_google_fonts_subset_greek'                         => '',
+  'x_google_fonts_subset_vietnamese'                    => '',
+  'x_body_font_family'                                  => 'Lato',
   'x_body_font_color'                                   => '#999999',
   'x_body_font_size'                                    => '14',
   'x_content_font_size'                                 => '14',
   'x_body_font_weight'                                  => '400',
+  'x_headings_font_family'                              => 'Lato',
+  'x_headings_font_color'                               => '#272727',
+  'x_headings_font_weight'                              => '700',
+  'x_h1_letter_spacing'                                 => '-0.035',
+  'x_h2_letter_spacing'                                 => '-0.035',
+  'x_h3_letter_spacing'                                 => '-0.035',
+  'x_h4_letter_spacing'                                 => '-0.035',
+  'x_h5_letter_spacing'                                 => '-0.035',
+  'x_h6_letter_spacing'                                 => '-0.035',
+  'x_headings_uppercase_enable'                         => '',
+  'x_headings_widget_icons_enable'                      => '',
   'x_site_link_color'                                   => '#ff2a13',
   'x_site_link_color_hover'                             => '#d80f0f',
   'x_button_style'                                      => 'real',
@@ -290,16 +281,29 @@ $customizer_settings_data = array(
   'x_logobar_adjust_spacing_bottom'                     => '15',
   'x_navbar_height'                                     => '90',
   'x_navbar_width'                                      => '235',
+  'x_logo_font_family'                                  => 'Lato',
+  'x_logo_font_color'                                   => '#272727',
+  'x_logo_font_size'                                    => '42',
+  'x_logo_font_weight'                                  => '700',
+  'x_logo_letter_spacing'                               => '-0.035',
+  'x_logo_uppercase_enable'                             => '',
   'x_logo'                                              => '',
   'x_logo_width'                                        => '',
-  'x_header_search_enable'                              => '',
-  'x_logo_adjust_navbar_top'                            => '13',
+  'x_logo_adjust_navbar_top'                            => '22',
+  'x_logo_adjust_navbar_side'                           => '30',
+  'x_navbar_font_family'                                => 'Lato',
+  'x_navbar_link_color'                                 => '#999999',
+  'x_navbar_link_color_hover'                           => '#272727',
+  'x_navbar_font_size'                                  => '13',
+  'x_navbar_font_weight'                                => '700',
+  'x_navbar_letter_spacing'                             => '0.085',
+  'x_navbar_uppercase_enable'                           => '1',
   'x_navbar_adjust_links_top'                           => '37',
   'x_navbar_adjust_links_top_spacing'                   => '20',
-  'x_logo_adjust_navbar_side'                           => '30',
   'x_navbar_adjust_links_side'                          => '50',
-  'x_navbar_adjust_button'                              => '20',
+  'x_header_search_enable'                              => '',
   'x_navbar_adjust_button_size'                         => '24',
+  'x_navbar_adjust_button'                              => '20',
   'x_header_widget_areas'                               => '2',
   'x_widgetbar_button_background'                       => '#000000',
   'x_widgetbar_button_background_hover'                 => '#444444',

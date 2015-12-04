@@ -8,7 +8,7 @@
 // =============================================================================
 
 $disable_page_title = get_post_meta( get_the_ID(), '_x_entry_disable_page_title', true );
-$breadcrumbs        = x_get_option( 'x_breadcrumb_display', '1' );
+$breadcrumbs        = x_get_option( 'x_breadcrumb_display' );
 
 ?>
 

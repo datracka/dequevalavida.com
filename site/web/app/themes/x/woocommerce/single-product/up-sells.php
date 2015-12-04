@@ -33,8 +33,8 @@ $products = new WP_Query( $args );
 
 $woocommerce_loop['columns'] = $columns;
 
-$enable  = x_get_option( 'x_woocommerce_product_upsells_enable', '1' );
-$columns = x_get_option( 'x_woocommerce_product_upsell_columns', '4' );
+$enable  = x_get_option( 'x_woocommerce_product_upsells_enable' );
+$columns = x_get_option( 'x_woocommerce_product_upsell_columns' );
 
 if ( $products->have_posts() && $enable == '1' ) : ?>
 

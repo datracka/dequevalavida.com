@@ -10,9 +10,8 @@
 // -----------------------------------------------------------------------------
 //   01. Preloader
 //   02. Dynamic Font Weights
-//   03. Updating Message
-//   04. Informational Elements
-//   05. Individual Sections
+//   03. Informational Elements
+//   04. Individual Sections
 //       a. Stacks
 //       b. Integrity
 //       c. Renew
@@ -34,10 +33,10 @@
     // =========================================================================
 
     //
-    // Hide the preloader after a specified delay.
+    // Hide and remove the preloader after a specified delay.
     //
 
-    $('#x-customizer-preloader').delay(850).fadeOut(800);
+    $('#x-customizer-preloader').delay(850).fadeOut(800, function() { $(this).remove(); });
 
 
 
@@ -48,7 +47,7 @@
     // Check if a value exists in an object.
     //
 
-    function is_part_of_object( needle, haystack ) {
+    function isPartOfObject( needle, haystack ) {
 
       for ( var i in haystack ) {
         if ( haystack[i] === needle ) {
@@ -64,38 +63,28 @@
     //
     // Show/hide the font weights associated with each font family.
     //
+    // 1. If the previous weight is hidden on font family change, select
+    //    regular (i.e. '400') as the weight since this is available
+    //    on all fonts and works as a consistent fallback.
+    //
 
     function showFontWeights( select ) {
 
-      var _id                = select.data('customize-setting-link').replace(/family/, 'weight');
-      var _font              = $('option:selected', select).val();
-      var _variants          = _wpCustomizeSettings.settings.x_list_font_weights.value[_font];
-      var _latoVariant       = _wpCustomizeSettings.settings.x_list_font_weights.value.Lato;
-      var _customFontsActive = $('#customize-control-x_custom_fonts input[value="1"]').is(':checked');
+      var _id       = select.data('customize-setting-link').replace(/family/, 'weight');
+      var _font     = $('option:selected', select).val().toLowerCase().replace(/[^a-z0-9_\-]/g, '');
+      var _variants = x_customizer_controls_data.x_fonts_data[_font].weights;
 
-      if ( _customFontsActive ) {
-
-        $('input[name="_customize-radio-' + _id + '"]').each( function() {
-          $this = $(this);
-          if ( ! is_part_of_object( $this.val(), _variants ) ) {
-            $this.parent().attr('data-x-hide', 'true');
-          } else {
-            $this.parent().removeAttr('data-x-hide');
+      $('input[name="_customize-radio-' + _id + '"]').each(function() {
+        $this = $(this);
+        if ( ! isPartOfObject($this.val(), _variants) ) {
+          $this.parent().attr('data-x-hide', 'true');
+          if ( $this.is(':checked') ) { // 1
+            wp.customize.instance(_id).set(_variants[0]);
           }
-        });
-
-      } else {
-
-        $('input[name="_customize-radio-' + _id + '"]').each( function() {
-          $this = $(this);
-          if ( ! is_part_of_object( $this.val(), _latoVariant ) ) {
-            $this.parent().attr('data-x-hide', 'true');
-          } else {
-            $this.parent().removeAttr('data-x-hide');
-          }
-        });
-
-      }
+        } else {
+          $this.parent().removeAttr('data-x-hide');
+        }
+      });
 
     }
 
@@ -104,18 +93,12 @@
     // Call the function when needed.
     //
 
-    var $fontSelect = $('#accordion-section-x_customizer_section_typography select');
+    var $fontFamilySelect = $('select[data-customize-setting-link*=_font_family]');
 
-    $fontSelect.each( function() {
-      showFontWeights( $(this) );
-    }).change( function() {
-      showFontWeights( $(this) );
-    });
-
-    $('#customize-control-x_custom_fonts input').change( function() {
-      $fontSelect.each( function() {
-        showFontWeights( $(this) );
-      });
+    $fontFamilySelect.each(function() {
+      showFontWeights($(this));
+    }).change(function() {
+      showFontWeights($(this));
     });
 
   });
@@ -123,77 +106,6 @@
 
 
   $(document).ready(function() {
-
-    // Updating Message
-    // =========================================================================
-
-    //
-    // Updating message setup.
-    //
-
-    var elPreview = $( '#customize-preview' );
-
-    elPreview.prepend( '<div class="x-updating">Updating</div>' );
-
-    var elUpdating         = $( '#customize-preview .x-updating' );
-    var elControlsText     = $( '.customize-control input[type="text"], .customize-control textarea' );
-    var elControlsNonText  = $( '.customize-control input[type="checkbox"], .customize-control input[type="radio"], .customize-control select' );
-    var elControlsColors   = $( '.customize-control-color .wp-color-picker' );
-    var elControlsUploader = $( '.customize-control-image .remove' );
-
-    function showUpdatingMessage( elUpdated ) {
-      if ( elUpdated.closest( '.control-section' ).attr( 'id' ).indexOf( 'x_customizer_section' ) !== -1 ) {
-        var key = elUpdated.closest( '.customize-control' ).attr( 'id' ).split( '-' ).pop();
-        if ( _wpCustomizeSettings.settings[key].transport === 'refresh' ) {
-          elUpdating.fadeIn( 'fast' );
-        }
-      }
-    }
-
-
-    //
-    // Show updating message.
-    //
-    // 1. Text inputs and textareas.
-    // 2. Checkboxes and radios.
-    // 3. Color pickers.
-    // 4. Uploaders.
-    //
-
-    elControlsText.on( 'input cut paste', function() { // 1
-      showUpdatingMessage( $(this) );
-    });
-
-    elControlsNonText.on( 'change', function() { // 2
-      showUpdatingMessage( $(this) );
-    });
-
-    elControlsColors.on( 'irischange', function() { // 3
-      showUpdatingMessage( $(this) );
-    });
-
-    $.each( wp.customize.control._value, function( index, item ) { // 4
-      if ( item.uploader ) {
-        item.uploader.uploader.bind( 'UploadComplete', function( files ) {
-          showUpdatingMessage( $( '#customize-control-' + index ) );
-        });
-      }
-    });
-
-    elControlsUploader.on( 'click', function() { // 4
-      showUpdatingMessage( $(this) );
-    });
-
-
-    //
-    // Hide updating message.
-    //
-
-    elPreview.on( 'DOMNodeRemoved', function( e ) {
-      elUpdating.fadeOut( 'fast' );
-    });
-
-
 
     // Informational Elements
     // =========================================================================
@@ -246,11 +158,9 @@
     xCustomizerText( 'x_ethos_post_slider_archive_enable',              'Post Slider &ndash; Archives',         'The archive "Post Slider" is located at the top of all archive pages, which allows you to showcase your posts in various formats. If "Featured" is selected, you can choose which posts you would like to appear in this location in the post meta options.' );
     xCustomizerText( 'x_ethos_filterable_index_enable',                 'Blog Options',                         'Enabling the filterable index will bypass the standard output of your blog page, allowing you to specify categories to highlight. Upon selecting this option, a text input will appear to enter in the IDs of the categories you would like to showcase. This input accepts a list of numeric IDs separated by a comma (e.g. 14, 1, 817).' );
     xCustomizerText( 'x_ethos_shop_title',                              'Shop Options',                         'Provide a title you would like to use for your shop. This will show up on the index page as well as in your breadcrumbs.' );
-    xCustomizerText( 'x_custom_fonts',                                  false,                                  'X provides you with full control over your site\'s typography. Remember to check the box for "Enable Custom Fonts" to set your own individual fonts for headings, body copy, et cetera.' );
-    xCustomizerText( 'x_logo_font_family',                              'Logo',                                 false );
-    xCustomizerText( 'x_navbar_font_family',                            'Navbar',                               false );
-    xCustomizerText( 'x_headings_font_family',                          'Headings',                             false );
+    xCustomizerText( 'x_google_fonts_subsets',                          false,                                  'Here you will find global typography options for your body copy and headings, while more specific typography options for elements like your navbar are found grouped with that element to make customization more streamlined. If you are using Google Fonts, you can also enable custom subsets here for expanded character sets.' );
     xCustomizerText( 'x_body_font_family',                              'Body and Content',                     '"Body Font Size (px)" will affect the sizing of all copy outside of a post or page content area. "Content Font Size (px)" will affect the sizing of all copy inside a post or page content area. Headings are set with percentages and sized proportionally to these settings.' );
+    xCustomizerText( 'x_headings_font_family',                          'Headings',                             'The letter spacing controls for each heading level will only affect that heading if it does not have a "looks like" class or if the "looks like" class matches that level. For example, if you have an &lt;h1&gt; with no modifier class, the &lt;h1&gt; slider will affect that heading. However, if your &lt;h1&gt; has an .h2 modifier class, then the &lt;h2&gt; slider will take over as it is supposed to appear as an &lt;h2&gt;.' );
     xCustomizerText( 'x_site_link_color',                               'Site Links',                           'Site link colors are also used as accents for various elements throughout your site, so make sure to select something you really enjoy and keep an eye out for how it affects your design.' );
     xCustomizerText( 'x_button_style',                                  false,                                  'Retina ready, limitless colors, and multiple shapes. The buttons available in X are fun to use, simple to implement, and look great on all devices no matter the size.' );
     xCustomizerText( 'x_button_color',                                  'Colors',                               false );
@@ -258,9 +168,14 @@
     xCustomizerText( 'x_navbar_positioning',                            false,                                  'Never before has such flexibility been offered to WordPress users for their site\'s header. It\'s one of the first things your visitors see when they come to your site, now you can make it look exactly how you want.' );
     xCustomizerText( 'x_logo_navigation_layout',                        'Logo and Navigation',                  'Selecting "Inline" for your logo and navigation layout will place them both in the navbar. Selecting "Stacked" will place the logo in a separate section above the navbar.' );
     xCustomizerText( 'x_navbar_height',                                 'Navbar',                               '"Navbar Top Height (px)" must still be set even when using "Fixed Left" or "Fixed Right" positioning because on tablet and mobile devices, the menu is pushed to the top.' );
-    xCustomizerText( 'x_logo',                                          'Logo',                                 'To make your logo retina ready, enter in the width of your uploaded image in the "Logo Width (px)" field and we\'ll take care of all the calculations for you. If you want your logo to stay the original size that was uploaded, leave the field blank.' );
-    xCustomizerText( 'x_header_search_enable',                          'Search',                               'Activate search functionality for the navbar. If activated, select the font size you would like to use for the search input.' );
-    xCustomizerText( 'x_logo_adjust_navbar_top',                        'Alignment',                            '"Navbar Top Logo Alignment (px)" and "Navbar Top Link Alignment (px)" must still be set even when using "Fixed Left" or "Fixed Right" positioning because on tablet and mobile devices, the menu is pushed to the top. "Navbar Top Link Spacing (px)" allows you to set the horizontal spacing between links with "Top" navigation styles for desktop menus.' );
+    xCustomizerText( 'x_logo_font_family',                              'Logo &ndash; Text',                    'Your logo will show up as text by default. Alternately, if you would like to use an image, upload it under the "Logo &ndash; Image" section below, which will automatically switch over. Logo alignment can also be adjusted under the "Logo &ndash; Alignment" section.' );
+    xCustomizerText( 'x_logo',                                          'Logo &ndash; Image',                   'To make your logo retina ready, enter in the width of your uploaded image in the "Logo Width (px)" field and we\'ll take care of all the calculations for you. If you want your logo to stay the original size that was uploaded, leave the field blank.' );
+    xCustomizerText( 'x_logo_adjust_navbar_top',                        'Logo &ndash; Alignment',               'Use the following controls to vertically align your logo as desired. Make sure to adjust your top alignment even if your navbar is fixed to a side as it will reformat to the top on smaller screens (this control will be hidden if you do not have a side navigation position selected).' );
+    xCustomizerText( 'x_navbar_font_family',                            'Links &ndash; Text',                   'Alter the appearance of the top-level navbar links for your site here and their alignment and spacing in the section below.' );
+    xCustomizerText( 'x_navbar_adjust_links_top',                       'Links &ndash; Alignment',              'Customize the vertical alignment of your links for both top and side navbar positions as well as alter the vertical spacing between links for top navbar positions with the "Navbar Top Link Spacing (px)" control.' );
+    xCustomizerText( 'x_header_search_enable',                          'Search',                               'Activate search functionality for the navbar. If activated, an icon will appear that when clicked will activate the search modal.' );
+    xCustomizerText( 'x_navbar_adjust_button_size',                     'Mobile Button',                        'Adjust the vertical alignment and size of the mobile button that appears on smaller screen sizes in your navbar.' );
+    xCustomizerText( 'x_dropdown_font_family',                          'Dropdowns',                            'Adjust the vertical alignment and size of the mobile button that appears on smaller screen sizes in your navbar.' );
     xCustomizerText( 'x_header_widget_areas',                           'Widgetbar',                            false );
     xCustomizerText( 'x_topbar_display',                                'Miscellaneous',                        false );
     xCustomizerText( 'x_footer_widget_areas',                           false,                                  'Easily adjust your site\'s footer by setting your widget areas to the specific number desired and turning on or off various parts as needed. You\'re never forced to use a layout you don\'t need with X.' );
@@ -280,8 +195,8 @@
     xCustomizerText( 'x_buddypress_activity_subtitle',                  'Component Subtitles',                  'Set the subtitles for the various "components" in BuddyPress (e.g. groups list, registration, et cetera). Keep in mind that the "Sites Subtitle" isn\'t utilized unless you have WordPress Multisite setup on your installation. Additionally, subtitles are not utilized across every Stack but are left here for ease of management.' );
     xCustomizerText( 'x_woocommerce_header_menu_enable',                false,                                  'Enable a cart in your navigation that you can customize to showcase the information you want your users to see as they add merchandise to their cart (e.g. item count, subtotal, et cetera).' );
     xCustomizerText( 'x_woocommerce_shop_layout_content',               'Shop',                                 'This section handles all options regarding your WooCommerce setup. Select your content layout, product columns, along with plenty of other options to get your shop up and running. The "Shop Layout" option allows you to keep your sidebar on your shop page if you have already selected "Content Left, Sidebar Right" or "Sidebar Left, Content Right" for you "Content Layout" option, or remove the sidebar completely if desired.' );
-    xCustomizerText( 'x_woocommerce_product_tabs_enable',               'Single Product',                       'All options available in this section pertain to the layout of your individual product pages. Simply enable or disable the sections you want to use to achieve the layout you want.' );
-    xCustomizerText( 'x_woocommerce_cart_cross_sells_enable',           'Cart',                                 'All options available in this section pertain to the layout of your cart page. Simply enable or disable the sections you want to use to achieve the layout you want.' );
+    xCustomizerText( 'x_woocommerce_product_tabs_enable',               'Single Product',                       'All options available in this section pertain to the layout of your individual product pages. Eenable or disable the sections you want to use to achieve the layout you want.' );
+    xCustomizerText( 'x_woocommerce_cart_cross_sells_enable',           'Cart',                                 'All options available in this section pertain to the layout of your cart page. Enable or disable the sections you want to use to achieve the layout you want.' );
     xCustomizerText( 'x_woocommerce_ajax_add_to_cart_color',            'AJAX Add to Cart',                     'If you have the "Enable AJAX add to cart buttons on archives" WooCommerce setting active, you can control the colors of the confirmation overlay here that appears when adding an item on a product index page.' );
     xCustomizerText( 'x_woocommerce_widgets_image_alignment',           'Widgets',                              'Select the placement of your product images in the various WooCommerce widgets that provide them. Right alignment is better if your items have longer titles to avoid staggered word wrapping.' );
     xCustomizerText( 'x_social_facebook',                               false,                                  'Set the URLs for your social media profiles here to be used in the topbar and bottom footer. Adding in a link will make its respective icon show up without needing to do anything else. Keep in mind that these sections are not necessarily intended for a lot of items, so adding all icons could create some layout issues. It is typically best to keep your selections here to a minimum for structural purposes and for usability purposes so you do not overwhelm your visitors.' );
@@ -580,59 +495,15 @@
     // Typography.
     //
 
-    var $typeCustomFontsInit = $('#customize-control-x_custom_fonts input:checked').val();
-    var $typeCustomFontsOpts = $('#customize-control-x_custom_fonts input');
-    var $typeCustomFontsTarg = [
-      { key : '1', target : '#customize-control-x_logo_font_family, #customize-control-x_navbar_font_family, #customize-control-x_headings_font_family, #customize-control-x_body_font_family' },
-      { key : '',  target : '' }
-    ];
-
-    xCustomizerInitialDisplay( $typeCustomFontsInit, $typeCustomFontsTarg );
-    xCustomizerChangeDisplay( $typeCustomFontsOpts, $typeCustomFontsTarg );
-
-
-    var $typeFontSubsetsInit = $('#customize-control-x_custom_font_subsets input:checked').val();
-    var $typeFontSubsetsOpts = $('#customize-control-x_custom_font_subsets input');
+    var $typeFontSubsetsInit = $('#customize-control-x_google_fonts_subsets input:checked').val();
+    var $typeFontSubsetsOpts = $('#customize-control-x_google_fonts_subsets input');
     var $typeFontSubsetsTarg = [
-      { key : '1', target : '#customize-control-x_custom_font_subset_cyrillic, #customize-control-x_custom_font_subset_greek, #customize-control-x_custom_font_subset_vietnamese' },
+      { key : '1', target : '#customize-control-x_google_fonts_subset_cyrillic, #customize-control-x_google_fonts_subset_greek, #customize-control-x_google_fonts_subset_vietnamese' },
       { key : '',  target : '' }
     ];
 
     xCustomizerInitialDisplay( $typeFontSubsetsInit, $typeFontSubsetsTarg );
     xCustomizerChangeDisplay( $typeFontSubsetsOpts, $typeFontSubsetsTarg );
-
-
-    var $typeLogoColorInit = $('#customize-control-x_logo_font_color_enable input:checked').val();
-    var $typeLogoColorOpts = $('#customize-control-x_logo_font_color_enable input');
-    var $typeLogoColorTarg = [
-      { key : '1', target : '#customize-control-x_logo_font_color' },
-      { key : '',  target : '' }
-    ];
-
-    xCustomizerInitialDisplay( $typeLogoColorInit, $typeLogoColorTarg );
-    xCustomizerChangeDisplay( $typeLogoColorOpts, $typeLogoColorTarg );
-
-
-    var $typeHeadingsColorInit = $('#customize-control-x_headings_font_color_enable input:checked').val();
-    var $typeHeadingsColorOpts = $('#customize-control-x_headings_font_color_enable input');
-    var $typeHeadingsColorTarg = [
-      { key : '1', target : '#customize-control-x_headings_font_color' },
-      { key : '',  target : '' }
-    ];
-
-    xCustomizerInitialDisplay( $typeHeadingsColorInit, $typeHeadingsColorTarg );
-    xCustomizerChangeDisplay( $typeHeadingsColorOpts, $typeHeadingsColorTarg );
-
-
-    var $typeBodyColorInit = $('#customize-control-x_body_font_color_enable input:checked').val();
-    var $typeBodyColorOpts = $('#customize-control-x_body_font_color_enable input');
-    var $typeBodyColorTarg = [
-      { key : '1', target : '#customize-control-x_body_font_color' },
-      { key : '',  target : '' }
-    ];
-
-    xCustomizerInitialDisplay( $typeBodyColorInit, $typeBodyColorTarg );
-    xCustomizerChangeDisplay( $typeBodyColorOpts, $typeBodyColorTarg );
 
 
     //

@@ -7,7 +7,7 @@
 // =============================================================================
 
 $stack                     = x_get_stack();
-$is_full_post_content_blog = is_home() && x_get_option( 'x_blog_enable_full_post_content', '' ) == '1';
+$is_full_post_content_blog = is_home() && x_get_option( 'x_blog_enable_full_post_content' ) == '1';
 
 ?>
 

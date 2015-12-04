@@ -18,9 +18,9 @@ if ( sizeof( $crosssells ) == 0 ) return;
 
 $meta_query = WC()->query->get_meta_query();
 
-$enable  = x_get_option( 'x_woocommerce_cart_cross_sells_enable', '1' );
-$count   = x_get_option( 'x_woocommerce_cart_cross_sells_count', '4' );
-$columns = x_get_option( 'x_woocommerce_cart_cross_sells_columns', '4' );
+$enable  = x_get_option( 'x_woocommerce_cart_cross_sells_enable' );
+$count   = x_get_option( 'x_woocommerce_cart_cross_sells_count' );
+$columns = x_get_option( 'x_woocommerce_cart_cross_sells_columns' );
 
 $args = array(
   'post_type'           => 'product',

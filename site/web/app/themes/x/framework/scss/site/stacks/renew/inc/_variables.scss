@@ -231,7 +231,6 @@ $placeholderText:    $grayLight !default;
 // Navbar.
 // 1. Base styles.
 // 2. Link and text styles.
-// 3. Brand styles.
 //
 
 $navbarHeight:                     90px                          !default; // 1
@@ -248,10 +247,6 @@ $navbarLinkColorHover:             $navbarLinkColor              !default; // 2
 $navbarLinkColorActive:            $gray                         !default; // 2
 $navbarLinkBackgroundHover:        transparent                   !default; // 2
 $navbarLinkBackgroundActive:       darken($navbarBackground, 3%) !default; // 2
-
-$navbarBrandFontWeight:            700                              !default; // 3
-$navbarBrandColor:                 $navbarLinkColor                 !default; // 3
-$navbarBrandTextShadow:            0 1px 0 rgba(255, 255, 255, 0.5) !default; // 3
 
 
 //

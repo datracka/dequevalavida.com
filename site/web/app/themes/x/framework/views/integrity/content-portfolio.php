@@ -6,7 +6,7 @@
 // Portfolio post output for Integrity.
 // =============================================================================
 
-$archive_share = x_get_option( 'x_integrity_portfolio_archive_post_sharing_enable', '' );
+$archive_share = x_get_option( 'x_integrity_portfolio_archive_post_sharing_enable' );
 
 ?>
 

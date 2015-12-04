@@ -30,20 +30,7 @@
 body {
   margin: 0;
   overflow-x: hidden;
-  font-family: $baseFontFamily;
-  @include font-size(1.4);
-  font-weight: $baseFontWeight;
   line-height: $baseLineHeight;
-  color: $textColor;
-  background: $bodyBackground;
-
-  &.x-navbar-fixed-left-active {
-    padding-left: $navbarFixedSideWidth;
-  }
-
-  &.x-navbar-fixed-right-active {
-    padding-right: $navbarFixedSideWidth;
-  }
 }
 
 
@@ -66,11 +53,6 @@ body {
 // =============================================================================
 
 a {
-  color: $linkColor;
   text-decoration: none;
   @include transition($linkTransitions);
-}
-
-a:hover {
-  color: $linkColorHover;
 }

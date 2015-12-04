@@ -139,14 +139,14 @@ remove_action( 'woocommerce_after_shop_loop_item', 'woocommerce_template_loop_ad
 //
 
 function x_woocommerce_shop_columns() {
-  return x_get_option( 'x_woocommerce_shop_columns', '3' );
+  return x_get_option( 'x_woocommerce_shop_columns' );
 }
 
 add_filter( 'loop_shop_columns', 'x_woocommerce_shop_columns' );
 
 
 function x_woocommerce_shop_posts_per_page() {
-  return x_get_option( 'x_woocommerce_shop_count', '12' );
+  return x_get_option( 'x_woocommerce_shop_count' );
 }
 
 add_filter( 'loop_shop_per_page', 'x_woocommerce_shop_posts_per_page' );
@@ -263,15 +263,15 @@ add_action( 'woocommerce_after_single_product', 'x_woocommerce_after_single_prod
 
 function x_woocommerce_add_remove_product_tabs( $tabs ) {
 
-  if ( x_get_option( 'x_woocommerce_product_tab_description_enable', '1' ) == '' ) {
+  if ( x_get_option( 'x_woocommerce_product_tab_description_enable' ) == '' ) {
     unset( $tabs['description'] );
   }
 
-  if ( x_get_option( 'x_woocommerce_product_tab_additional_info_enable', '1' ) == '' ) {
+  if ( x_get_option( 'x_woocommerce_product_tab_additional_info_enable' ) == '' ) {
     unset( $tabs['additional_information'] );
   }
 
-  if ( x_get_option( 'x_woocommerce_product_tab_reviews_enable', '1' ) == '' ) {
+  if ( x_get_option( 'x_woocommerce_product_tab_reviews_enable' ) == '' ) {
     unset( $tabs['reviews'] );
   }
 
@@ -322,8 +322,8 @@ add_filter( 'woocommerce_cart_no_shipping_available_html', 'x_woocommerce_cart_n
 
 function x_woocommerce_output_related_products() {
 
-  $count   = x_get_option( 'x_woocommerce_product_related_count', '4' );
-  $columns = x_get_option( 'x_woocommerce_product_related_columns', '4' );
+  $count   = x_get_option( 'x_woocommerce_product_related_count' );
+  $columns = x_get_option( 'x_woocommerce_product_related_columns' );
 
   $args = array(
     'posts_per_page' => $count,
@@ -346,8 +346,8 @@ add_action( 'woocommerce_after_single_product_summary', 'x_woocommerce_output_re
 
 function x_woocommerce_output_upsells() {
 
-  $count   = x_get_option( 'x_woocommerce_product_upsell_count', '4' );
-  $columns = x_get_option( 'x_woocommerce_product_upsell_columns', '4' );
+  $count   = x_get_option( 'x_woocommerce_product_upsell_count' );
+  $columns = x_get_option( 'x_woocommerce_product_upsell_columns' );
 
   woocommerce_upsell_display( $count, $columns, 'rand' );
 
@@ -369,14 +369,14 @@ add_action( 'woocommerce_after_single_product_summary', 'x_woocommerce_output_up
 if ( ! function_exists( 'x_woocommerce_navbar_cart' ) ) :
   function x_woocommerce_navbar_cart() {
 
-    $cart_info   = x_get_option( 'x_woocommerce_header_cart_info', 'outer-inner' );
-    $cart_layout = x_get_option( 'x_woocommerce_header_cart_layout', 'inline' );
-    $cart_style  = x_get_option( 'x_woocommerce_header_cart_style', 'square' );
-    $cart_outer  = x_get_option( 'x_woocommerce_header_cart_content_outer', 'total' );
-    $cart_inner  = x_get_option( 'x_woocommerce_header_cart_content_inner', 'count' );
+    $cart_info   = x_get_option( 'x_woocommerce_header_cart_info' );
+    $cart_layout = x_get_option( 'x_woocommerce_header_cart_layout' );
+    $cart_style  = x_get_option( 'x_woocommerce_header_cart_style' );
+    $cart_outer  = x_get_option( 'x_woocommerce_header_cart_content_outer' );
+    $cart_inner  = x_get_option( 'x_woocommerce_header_cart_content_inner' );
 
     $data = array(
-      'icon'  => '<i class="x-icon-shopping-cart" data-x-icon="&#xf07a;"></i>',
+      'icon'  => '<i class="x-icon-shopping-cart" data-x-icon="&#xf07a;" aria-hidden="true"></i>',
       'total' => WC()->cart->get_cart_total(),
       'count' => sprintf( _n( '%d Item', '%d Items', WC()->cart->cart_contents_count, '__x__' ), WC()->cart->cart_contents_count )
     );
@@ -424,7 +424,7 @@ endif;
 if ( ! function_exists( 'x_woocommerce_navbar_menu_item' ) ) :
   function x_woocommerce_navbar_menu_item( $items, $args ) {
 
-    if ( X_WOOCOMMERCE_IS_ACTIVE && x_get_option( 'x_woocommerce_header_menu_enable', '' ) == '1' ) {
+    if ( X_WOOCOMMERCE_IS_ACTIVE && x_get_option( 'x_woocommerce_header_menu_enable' ) == '1' ) {
       if ( $args->theme_location == 'primary' ) {
         $items .= '<li class="menu-item current-menu-parent x-menu-item x-menu-item-woocommerce">'
                   . '<a href="' . x_get_cart_link() . '" class="x-btn-navbar-woocommerce">'
@@ -451,10 +451,10 @@ if ( ! function_exists( 'x_woocommerce_navbar_cart_ajax_notification' ) ) :
     if ( x_is_product_index() && get_option( 'woocommerce_enable_ajax_add_to_cart' ) == 'yes' ) {
       $notification = '<div class="x-cart-notification">'
                       . '<div class="x-cart-notification-icon loading">'
-                        . '<i class="x-icon-cart-arrow-down" data-x-icon="&#xf218;"></i>'
+                        . '<i class="x-icon-cart-arrow-down" data-x-icon="&#xf218;" aria-hidden="true"></i>'
                       . '</div>'
                       . '<div class="x-cart-notification-icon added">'
-                        . '<i class="x-icon-check" data-x-icon="&#xf00c;"></i>'
+                        . '<i class="x-icon-check" data-x-icon="&#xf00c;" aria-hidden="true"></i>'
                       . '</div>'
                     . '</div>';
     } else {

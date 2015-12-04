@@ -56,7 +56,7 @@ endif;
 if ( ! function_exists( 'x_excerpt_length' ) ) :
   function x_excerpt_length( $length ) {
 
-    return x_get_option( 'x_blog_excerpt_length', '60' );
+    return x_get_option( 'x_blog_excerpt_length' );
 
   }
   add_filter( 'excerpt_length', 'x_excerpt_length' );
@@ -162,8 +162,8 @@ if ( ! function_exists( 'x_does_not_need_entry_meta' ) ) :
 
     $post_type           = get_post_type();
     $page_condition      = $post_type == 'page';
-    $post_condition      = $post_type == 'post' && x_get_option( 'x_blog_enable_post_meta', '' ) == '';
-    $portfolio_condition = $post_type == 'x-portfolio' && x_get_option( 'x_portfolio_enable_post_meta', '1' ) == '';
+    $post_condition      = $post_type == 'post' && x_get_option( 'x_blog_enable_post_meta' ) == '';
+    $portfolio_condition = $post_type == 'x-portfolio' && x_get_option( 'x_portfolio_enable_post_meta' ) == '';
 
     if ( $page_condition || $post_condition || $portfolio_condition ) {
       return true;

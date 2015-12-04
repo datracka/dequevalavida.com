@@ -27,24 +27,18 @@
   .bbp-topic-permalink,
   .x-bbp-general-form legend {
     font-weight: <?php echo $x_headings_font_weight; ?>;
-    <?php if ( $x_headings_font_color_enable == 1 ) : ?>
-      color: <?php echo $x_headings_font_color; ?>;
-    <?php endif; ?>
+    color: <?php echo $x_headings_font_color; ?>;
   }
 
-  <?php if ( $x_body_font_color_enable == 1 ) : ?>
-    .x-bbp-item-info-header .x-item-info-permalink,
-    .bbp-body .bbp-forum-freshness a,
-    .bbp-body .bbp-topic-freshness a {
-      color: <?php echo $x_body_font_color; ?>;
-    }
-  <?php endif; ?>
+  .x-bbp-item-info-header .x-item-info-permalink,
+  .bbp-body .bbp-forum-freshness a,
+  .bbp-body .bbp-topic-freshness a {
+    color: <?php echo $x_body_font_color; ?>;
+  }
 
-  <?php if ( $x_headings_font_color_enable == 1 ) : ?>
-    .x-bbp-item-info-content .x-bbp-item-info-author .bbp-author-name {
-      color: <?php echo $x_headings_font_color; ?>;
-    }
-  <?php endif; ?>
+  .x-bbp-item-info-content .x-bbp-item-info-author .bbp-author-name {
+    color: <?php echo $x_headings_font_color; ?>;
+  }
 
   .bbp-forum-title:hover,
   .bbp-topic-permalink:hover,

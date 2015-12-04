@@ -68,7 +68,7 @@ if ( ! class_exists( 'X_TGM_Automatic_Update' ) ) :
           $response->slug           = $plugin['slug'];
           $response->upgrade_notice = '';
           $response->new_version    = $plugin['version'];
-          $response->package        = $plugin['source'];
+          $response->package        = X_TEMPLATE_URL . '/framework/plugins/' . $plugin['source'];
 
           $transient->response[$plugin['x_plugin']] = $response;
 

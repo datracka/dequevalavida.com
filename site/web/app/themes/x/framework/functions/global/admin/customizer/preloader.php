@@ -27,7 +27,7 @@ function x_customizer_preloader() {
       overflow: hidden !important;
     }
 
-    .x-cpl {
+    .x-preloader {
       position: fixed;
       top: 0;
       left: 0;
@@ -35,27 +35,30 @@ function x_customizer_preloader() {
       bottom: 0;
       text-align: center;
       background-color: #fff;
-      z-index: 9999999;
+      z-index: 999999999;
+      -webkit-perspective: 1000px;
+          -ms-perspective: 1000px;
+              perspective: 1000px;
     }
 
-    .x-cpl-inner {
+    .x-preloader-logo {
       display: block;
       position: absolute;
       top: 50%;
       left: 50%;
-      width: 150px;
-      height: 150px;
-      margin: -75px 0 0 -75px;
-      background-repeat: no-repeat;
-      background-position: center 155px;
+      width: 250px;
+      height: 250px;
+      margin: -150px 0 0 -125px;
+      font-size: 250px;
+      font-weight: 600;
+      line-height: 1;
+      -webkit-animation: pulseRotate 6s ease infinite;
+         -moz-animation: pulseRotate 6s ease infinite;
+           -o-animation: pulseRotate 6s ease infinite;
+              animation: pulseRotate 6s ease infinite;
     }
 
-
-    /*
-    // Text.
-    */
-
-    .x-cpl-text {
+    .x-preloader-text {
       position: absolute;
       left: 100px;
       right: 100px;
@@ -71,178 +74,32 @@ function x_customizer_preloader() {
 
 
     /*
-    // Spinner.
+    // Animation.
     */
 
-    .x-cpl-spinner {
-      margin: 35px;
-      width: 80px;
-      height: 80px;
-      position: relative;
+    @-webkit-keyframes pulseRotate {
+      0%  { -webkit-transform: rotateY(0deg); }
+      10% { -webkit-transform: rotateY(180deg); }
+      20% { -webkit-transform: rotateY(360deg); }
+      50% { -webkit-transform: rotateY(360deg); }
+      60% { -webkit-transform: rotateY(180deg); }
+      70% { -webkit-transform: rotateY(0deg); }
     }
 
-
-    /*
-    // Spinner modules.
-    */
-
-    .x-cpl-spinner-mod {
-      position: absolute;
-      width: 100%;
-      height: 100%;
-    }
-
-    .x-cpl-spinner-mod.mod-2 {
-      -webkit-transform: rotateZ(45deg);
-              transform: rotateZ(45deg);
-    }
-
-    .x-cpl-spinner-mod.mod-3 {
-      -webkit-transform: rotateZ(90deg);
-              transform: rotateZ(90deg);
-    }
-
-
-    /*
-    // Spinner circles.
-    */
-
-    .x-cpl-spinner-mod > div {
-      position: absolute;
-      width: 20px;
-      height: 20px;
-      background-color: #222;
-      border-radius: 100%;
-      -webkit-animation: bouncedelay 1.2s infinite ease-in-out;
-              animation: bouncedelay 1.2s infinite ease-in-out;
-      -webkit-animation-fill-mode: both;
-              animation-fill-mode: both;
-    }
-
-    .x-cpl-spinner-circle-1 {
-      top: 0;
-      left: 0;
-    }
-
-    .x-cpl-spinner-circle-2 {
-      top: 0;
-      right: 0;
-    }
-
-    .x-cpl-spinner-circle-3 {
-      right: 0;
-      bottom: 0;
-    }
-
-    .x-cpl-spinner-circle-4 {
-      left: 0;
-      bottom: 0;
-    }
-
-    .x-cpl-spinner-mod.mod-2 .x-cpl-spinner-circle-1 {
-      -webkit-animation-delay: -1.1s;
-              animation-delay: -1.1s;
-    }
-
-    .x-cpl-spinner-mod.mod-3 .x-cpl-spinner-circle-1 {
-      -webkit-animation-delay: -1.0s;
-              animation-delay: -1.0s;
-    }
-
-    .x-cpl-spinner-mod.mod-1 .x-cpl-spinner-circle-2 {
-      -webkit-animation-delay: -0.9s;
-              animation-delay: -0.9s;
-    }
-
-    .x-cpl-spinner-mod.mod-2 .x-cpl-spinner-circle-2 {
-      -webkit-animation-delay: -0.8s;
-              animation-delay: -0.8s;
-    }
-
-    .x-cpl-spinner-mod.mod-3 .x-cpl-spinner-circle-2 {
-      -webkit-animation-delay: -0.7s;
-              animation-delay: -0.7s;
-    }
-
-    .x-cpl-spinner-mod.mod-1 .x-cpl-spinner-circle-3 {
-      -webkit-animation-delay: -0.6s;
-              animation-delay: -0.6s;
-    }
-
-    .x-cpl-spinner-mod.mod-2 .x-cpl-spinner-circle-3 {
-      -webkit-animation-delay: -0.5s;
-              animation-delay: -0.5s;
-    }
-
-    .x-cpl-spinner-mod.mod-3 .x-cpl-spinner-circle-3 {
-      -webkit-animation-delay: -0.4s;
-              animation-delay: -0.4s;
-    }
-
-    .x-cpl-spinner-mod.mod-1 .x-cpl-spinner-circle-4 {
-      -webkit-animation-delay: -0.3s;
-              animation-delay: -0.3s;
-    }
-
-    .x-cpl-spinner-mod.mod-2 .x-cpl-spinner-circle-4 {
-      -webkit-animation-delay: -0.2s;
-              animation-delay: -0.2s;
-    }
-
-    .x-cpl-spinner-mod.mod-3 .x-cpl-spinner-circle-4 {
-      -webkit-animation-delay: -0.1s;
-              animation-delay: -0.1s;
-    }
-
-
-    /*
-    // Spinner animation.
-    */
-
-    @-webkit-keyframes bouncedelay {
-      0%, 80%, 100% {
-        -webkit-transform: scale(0.0);
-      } 40% {
-        -webkit-transform: scale(1.0);
-      }
-    }
-
-    @keyframes bouncedelay {
-      0%, 80%, 100% {
-        -webkit-transform: scale(0.0);
-                transform: scale(0.0);
-      } 40% {
-        -webkit-transform: scale(1.0);
-                transform: scale(1.0);
-      }
+    @keyframes pulseRotate {
+      0%  { transform: rotateY(0deg); }
+      10% { transform: rotateY(180deg); }
+      20% { transform: rotateY(360deg); }
+      50% { transform: rotateY(360deg); }
+      60% { transform: rotateY(180deg); }
+      70% { transform: rotateY(0deg); }
     }
 
   </style>
 
-  <div class="x-cpl" id="x-customizer-preloader">
-    <div class="x-cpl-inner">
-      <div class="x-cpl-spinner">
-        <div class="x-cpl-spinner-mod mod-1">
-          <div class="x-cpl-spinner-circle-1"></div>
-          <div class="x-cpl-spinner-circle-2"></div>
-          <div class="x-cpl-spinner-circle-3"></div>
-          <div class="x-cpl-spinner-circle-4"></div>
-        </div>
-        <div class="x-cpl-spinner-mod mod-2">
-          <div class="x-cpl-spinner-circle-1"></div>
-          <div class="x-cpl-spinner-circle-2"></div>
-          <div class="x-cpl-spinner-circle-3"></div>
-          <div class="x-cpl-spinner-circle-4"></div>
-        </div>
-        <div class="x-cpl-spinner-mod mod-3">
-          <div class="x-cpl-spinner-circle-1"></div>
-          <div class="x-cpl-spinner-circle-2"></div>
-          <div class="x-cpl-spinner-circle-3"></div>
-          <div class="x-cpl-spinner-circle-4"></div>
-        </div>
-      </div>
-    </div>
-    <div class="x-cpl-text">Powered by Themeco</div>
+  <div class="x-preloader" id="x-customizer-preloader">
+    <div class="x-preloader-logo">X</div>
+    <div class="x-preloader-text"><?php _e( 'Powered by Themeco', '__x__' ); ?></div>
   </div>
 
   <?php

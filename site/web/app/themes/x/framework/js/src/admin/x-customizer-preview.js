@@ -34,8 +34,6 @@
     } );
   } );
 
-
-
   wp.customize( 'x_layout_content_width', function( value ) {
     value.bind( function( newval ) {
 
@@ -151,7 +149,61 @@
     } );
   } );
 
+
+  //
+  // Letter spacing.
+  //
+
+  wp.customize( 'x_logo_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( '.x-brand' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_navbar_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( '.x-navbar .x-nav-wrap .x-nav > li > a' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h1_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h1:not(.h2):not(.h3):not(.h4):not(.h5):not(.h6), .h1' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h2_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h2:not(.h1):not(.h3):not(.h4):not(.h5):not(.h6), .h2, body .gform_wrapper h2.gsection_title' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h3_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h3:not(.h1):not(.h2):not(.h4):not(.h5):not(.h6), .h3, body .gform_wrapper h3.gform_title' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h4_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h4:not(.h1):not(.h2):not(.h3):not(.h5):not(.h6), .h4' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h5_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h5:not(.h1):not(.h2):not(.h3):not(.h4):not(.h6), .h5' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
+  wp.customize( 'x_h6_letter_spacing', function( value ) {
+    value.bind( function( newval ) {
+      $( 'h6:not(.h1):not(.h2):not(.h3):not(.h4):not(.h5), .h6' ).css( 'letter-spacing', newval + 'em' );
+    } );
+  } );
+
 } )( jQuery );
+
 
 
 // Unpersist WooCommerce Navbar Cart
@@ -159,10 +211,12 @@
 
 ( function( $ ) {
 
-  if ( x_customizer_data.woocommerce_is_active && 'sessionStorage' in window && window.sessionStorage !== null ) {
-    var fragments = jQuery.parseJSON( window.sessionStorage.wc_fragments );
+  if ( x_customizer_preview_data.x_woocommerce_is_active && 'sessionStorage' in window && window.sessionStorage !== null ) {
+
+    var fragments = jQuery.parseJSON(window.sessionStorage.wc_fragments);
     delete fragments['div.x-cart'];
-    window.sessionStorage.wc_fragments = JSON.stringify( fragments );
+    window.sessionStorage.wc_fragments = JSON.stringify(fragments);
+
   }
 
 } )( jQuery );

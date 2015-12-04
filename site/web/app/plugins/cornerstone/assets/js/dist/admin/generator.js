@@ -54,8 +54,13 @@ window.csg = window.csg || {};
 
   var Controller = function( wrapper ) {
 
-    this.shortcodes = new ShortcodeCollection();
-    this.shortcodes.fetch( {reset: true } );
+
+
+    $(window).load(function(){
+    	this.shortcodes = new ShortcodeCollection();
+    	this.shortcodes.fetch( {reset: true } );
+    }.bind(this));
+
 
     $(document).on( 'click', '#cs-insert-shortcode-button', function( e ){
       e.preventDefault();
@@ -780,13 +785,7 @@ __p += '\n<label for="param-' +
 }
 return __p
 };module.exports=templates;
-},{}],"backbone":[function(require,module,exports){
-module.exports = window.Backbone;
-},{}],"jquery":[function(require,module,exports){
-module.exports = window.jQuery;
-},{}],"underscore":[function(require,module,exports){
-module.exports = window._;
-},{}]},{},[1])("underscore")
+},{}]},{},[1])(1)
 });
 //# sourceMappingURL=generator.map
 

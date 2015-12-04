@@ -29,12 +29,12 @@ $plgn_path = 'framework/functions/global/plugins';
 // =============================================================================
 
 //
-// Helpers, conditionals, and stack data.
+// Debugging, conditionals, helpers, and stack data.
 //
 
 require_once( $glob_path . '/debug.php' );
-require_once( $glob_path . '/helper.php' );
 require_once( $glob_path . '/conditionals.php' );
+require_once( $glob_path . '/helper.php' );
 require_once( $glob_path . '/stack-data.php' );
 
 
@@ -54,11 +54,11 @@ require_once( $admn_path . '/addons/setup.php' );
 
 
 //
-// TMG plugin activation.
+// TMG plugin setup.
 //
 
-require_once( $tmgp_path . '/activation.php' );
-require_once( $tmgp_path . '/registration.php' );
+require_once( $tmgp_path . '/setup.php' );
+require_once( $tmgp_path . '/register.php' );
 require_once( $tmgp_path . '/updates.php' );
 
 
@@ -106,6 +106,18 @@ if ( X_BBPRESS_IS_ACTIVE ) {
 
 if ( X_BUDDYPRESS_IS_ACTIVE ) {
   require_once( $plgn_path . '/buddypress.php' );
+}
+
+if ( X_ENVIRA_GALLERY_IS_ACTIVE ) {
+  require_once( $plgn_path . '/envira-gallery.php' );
+}
+
+if ( X_ESSENTIAL_GRID_IS_ACTIVE ) {
+  require_once( $plgn_path . '/essential-grid.php' );
+}
+
+if ( X_LAYERSLIDER_IS_ACTIVE ) {
+  require_once( $plgn_path . '/layerslider.php' );
 }
 
 if ( X_REVOLUTION_SLIDER_IS_ACTIVE ) {

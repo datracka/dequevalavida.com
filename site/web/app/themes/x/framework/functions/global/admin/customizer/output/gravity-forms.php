@@ -27,7 +27,14 @@
   body .gform_wrapper h2.gsection_title,
   body .gform_wrapper h3.gform_title {
     font-weight: <?php echo $x_headings_font_weight; ?>;
-    letter-spacing: <?php echo $x_headings_letter_spacing . 'px !important'; ?>;
+  }
+
+  body .gform_wrapper h2.gsection_title {
+    letter-spacing: <?php echo $x_h2_letter_spacing . 'em !important'; ?>;
+  }
+
+  body .gform_wrapper h3.gform_title {
+    letter-spacing: <?php echo $x_h3_letter_spacing . 'em !important'; ?>;
   }
 
   body .gform_wrapper .top_label .gfield_label,

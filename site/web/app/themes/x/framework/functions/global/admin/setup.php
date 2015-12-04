@@ -11,6 +11,7 @@
 // -----------------------------------------------------------------------------
 //   01. Content Width
 //   02. Theme Setup
+//   03. Bust Caches
 // =============================================================================
 
 // Content Width
@@ -132,4 +133,20 @@ if ( ! function_exists( 'x_setup_theme' ) ) :
 
   }
   add_action( 'after_setup_theme', 'x_setup_theme' );
+endif;
+
+
+
+// Bust Caches
+// =============================================================================
+
+if ( ! function_exists( 'x_bust_caches' ) ) :
+  function x_bust_caches() {
+
+    if ( isset( $_GET['x-bust-caches'] ) ) {
+      x_bust_google_fonts_cache();
+    }
+
+  }
+  add_action( 'admin_init', 'x_bust_caches' );
 endif;

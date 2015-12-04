@@ -197,7 +197,7 @@ class WP_Clean_Slate {
 		add_action( 'wp_footer', 'wp_print_footer_scripts', 20 );
 		add_action( 'wp_footer', 'wp_admin_bar_render', 1000 );
 
-		if ($this->options['mediaTemplates']) {
+		if ($this->options['mediaTemplates'] && function_exists( 'wp_underscore_playlist_templates' ) && function_exists( 'wp_print_media_templates' ) ) {
 			add_action( 'wp_footer', 'wp_underscore_playlist_templates', 0 );
 			add_action( 'wp_footer', 'wp_print_media_templates' );
 		}

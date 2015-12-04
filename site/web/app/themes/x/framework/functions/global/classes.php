@@ -31,23 +31,23 @@ if ( ! function_exists( 'x_body_class' ) ) :
     $entry_id                         = get_the_ID();
 
     $is_blog                          = is_home();
-    $blog_style_masonry               = x_get_option( 'x_blog_style', 'standard' ) == 'masonry';
-    $post_meta_disabled               = x_get_option( 'x_blog_enable_post_meta', '' ) == '';
+    $blog_style_masonry               = x_get_option( 'x_blog_style' ) == 'masonry';
+    $post_meta_disabled               = x_get_option( 'x_blog_enable_post_meta' ) == '';
 
     $is_archive                       = is_archive();
-    $archive_style_masonry            = x_get_option( 'x_archive_style', 'standard' ) == 'masonry';
+    $archive_style_masonry            = x_get_option( 'x_archive_style' ) == 'masonry';
     $is_shop                          = x_is_shop();
 
     $is_page                          = is_page();
     $page_title_disabled              = get_post_meta( $entry_id, '_x_entry_disable_page_title', true ) == 'on';
 
     $is_portfolio                     = is_page_template( 'template-layout-portfolio.php' );
-    $portfolio_meta_disabled          = x_get_option( 'x_portfolio_enable_post_meta', '' ) == '';
+    $portfolio_meta_disabled          = x_get_option( 'x_portfolio_enable_post_meta' ) == '';
 
-    $integrity_design_dark            = x_get_option( 'x_integrity_design', 'light' ) == 'dark';
+    $integrity_design_dark            = x_get_option( 'x_integrity_design' ) == 'dark';
     $icon_blank_sidebar_active        = $stack == 'icon' && get_post_meta( $entry_id, '_x_icon_blank_template_sidebar', true ) == 'Yes'; 
-    $ethos_post_slider_blog_active    = $stack == 'ethos' && is_home() && x_get_option( 'x_ethos_post_slider_blog_enable', '' ) == 1;
-    $ethos_post_slider_archive_active = $stack == 'ethos' && ( is_category() || is_tag() ) && x_get_option( 'x_ethos_post_slider_archive_enable', '' ) == 1;
+    $ethos_post_slider_blog_active    = $stack == 'ethos' && is_home() && x_get_option( 'x_ethos_post_slider_blog_enable' ) == 1;
+    $ethos_post_slider_archive_active = $stack == 'ethos' && ( is_category() || is_tag() ) && x_get_option( 'x_ethos_post_slider_archive_enable' ) == 1;
 
     $custom_class                     = get_post_meta( $entry_id, '_x_entry_body_css_class', true );
 

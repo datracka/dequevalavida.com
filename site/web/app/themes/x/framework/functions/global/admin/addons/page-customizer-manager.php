@@ -66,6 +66,7 @@ function x_addons_customizer_import_functionality() {
         foreach ( $options as $key => $value ) {
           update_option( $key, $value );
         }
+        x_bust_google_fonts_cache();
         echo '<div class="updated"><p><strong>Huzzah!</strong> All Customizer settings were successfully restored!</p></div>';
       } else {
         echo '<div class="error"><p><strong>Uh oh.</strong> Invalid file type provided or file size too big. Please try again.</p></div>';
@@ -178,6 +179,8 @@ function x_addons_customizer_reset_functionality() {
     foreach ( $customizer_settings_data as $option => $default ) {
       delete_option( $option );
     }
+
+    x_bust_google_fonts_cache();
 
     echo '<div class="updated"><p>All Customizer settings were successfully reset.</p></div>';
 
