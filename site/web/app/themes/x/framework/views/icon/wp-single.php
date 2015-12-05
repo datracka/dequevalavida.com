@@ -11,7 +11,7 @@ $fullwidth = get_post_meta( get_the_ID(), '_x_post_layout', true );
 ?>
 
 <?php get_header(); ?>
-  
+
   <div class="x-main full" role="main">
 
     <?php while ( have_posts() ) : the_post(); ?>
