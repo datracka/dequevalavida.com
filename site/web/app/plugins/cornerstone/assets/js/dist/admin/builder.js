@@ -120,13 +120,14 @@ cs.updateRegistry( {
 		'layout-section',
 		'layout-templates',
 		'inspector',
-		'settings'
+		'settings',
+		'skeleton'
 	],
 	preview: [ 'preview' ]
 } );
 
 // //cs.loadComponents( (cs.config( 'isPreview' )) ? 'preview' : 'editor' );
-},{"../vendor/html.sortable":113,"../vendor/jquery.growl":114,"../vendor/jquery.visible":115,"../vendor/pointer-events-polyfill":116,"../vendor/rgbaster":117,"./components":22,"./utility/jquery.shadow-height":25,"./utility/string-replace-all":28,"moment":118,"mousetrap":119,"mousetrap/plugins/global-bind/mousetrap-global-bind":120,"nprogress":121,"perfect-scrollbar/jquery":122}],5:[function(require,module,exports){
+},{"../vendor/html.sortable":120,"../vendor/jquery.growl":121,"../vendor/jquery.visible":122,"../vendor/pointer-events-polyfill":123,"../vendor/rgbaster":124,"./components":23,"./utility/jquery.shadow-height":26,"./utility/string-replace-all":29,"moment":125,"mousetrap":126,"mousetrap/plugins/global-bind/mousetrap-global-bind":127,"nprogress":128,"perfect-scrollbar/jquery":129}],5:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
@@ -208,7 +209,7 @@ module.exports = Cornerstone.Component.extend({
 	},
 
 });
-},{"../../behaviors":3,"../../utility/renderer":26}],8:[function(require,module,exports){
+},{"../../behaviors":3,"../../utility/renderer":27}],8:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
@@ -320,7 +321,6 @@ module.exports = Cornerstone.Component.extend({
 				}, this ).concat( _.map( response.jobs, function( job, jobID) {
 					return _.bind( function( next ) {
 
-						var registeredJob = this.registeredJobs[ jobID ];
 						if ( job.markup.indexOf('%%TMPL%%') == 0 ) {
 							job.markup = job.markup.replace('%%TMPL%%','');
 							job.markup = _.template(job.markup);
@@ -329,8 +329,11 @@ module.exports = Cornerstone.Component.extend({
 							job.markup = cs.template( 'empty-element' );
 						}
 
-						registeredJob.callback.call( this, job.markup );
-						delete this.registeredJobs[ jobID ];
+						if ( this.registeredJobs[ jobID ] && !this.jobs[ jobID ] ) {
+							this.registeredJobs[ jobID ].callback.call( this, job.markup );
+							delete this.registeredJobs[ jobID ];
+						}
+
 						next();
 					}, this );
 				}, this ) ) ).done( _.bind( function(message){
@@ -394,11 +397,12 @@ module.exports = Cornerstone.Component.extend({
 	}
 
 });
-},{"../../../tmp/templates-builder.js":110,"../../../tmp/templates-elements.js":111,"../../../tmp/templates-svg.js":112}],11:[function(require,module,exports){
+},{"../../../tmp/templates-builder.js":117,"../../../tmp/templates-elements.js":118,"../../../tmp/templates-svg.js":119}],11:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
 		this.listenTo( cs.events, 'editor:init', this.registerControlViews );
+		this.listenTo( cs.events, 'editor:init', this.registerSkeletonViews );
 		this.listenTo( cs.events, 'preview:init', this.registerElementViews );
 	},
 
@@ -415,6 +419,15 @@ module.exports = Cornerstone.Component.extend({
 
 	},
 
+	registerSkeletonViews: function() {
+
+
+    window.Cornerstone.SkeletonViews = { Base: require('../../views/skeleton/base') };
+    _.extend( window.Cornerstone.SkeletonViews, require('../../views/skeleton') );
+    cs.events.trigger( 'register:skeleton:views' );
+
+	},
+
 	registerControlViews: function() {
 
 		window.Cornerstone.ControlViews = { Base: require('../../views/controls/base') };
@@ -427,8 +440,12 @@ module.exports = Cornerstone.Component.extend({
     return Cornerstone.ElementViews[id] || Cornerstone.ElementViews.Base;
   },
 
+  skeletonLookup: function ( id ) {
+    return Cornerstone.SkeletonViews[id] || Cornerstone.SkeletonViews.Base;
+  },
+
 });
-},{"../../views/controls":43,"../../views/controls/base":30,"../../views/elements/base":70,"../../views/preview":100,"../../views/preview/base":94}],12:[function(require,module,exports){
+},{"../../views/controls":44,"../../views/controls/base":31,"../../views/elements/base":71,"../../views/preview":102,"../../views/preview/base":96,"../../views/skeleton":114,"../../views/skeleton/base":112}],12:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function( options ) {
@@ -449,7 +466,7 @@ module.exports = Cornerstone.Component.extend({
 
 	},
 
-	primed: function() {
+	primed: function( late ) {
 
 		this.clearPreloader();
 
@@ -458,6 +475,8 @@ module.exports = Cornerstone.Component.extend({
 		cs.global.reply( 'editor:ready', true );
 		cs.global.trigger( 'editor:ready' );
 
+		if ( late )
+			cs.message.trigger( 'notice', cs.l18n( 'preview-late') );
 
 	},
 
@@ -498,7 +517,7 @@ module.exports = Cornerstone.Component.extend({
   }
 
 });
-},{"../../utility/custom-media-manager":24,"../../views/main/editor":87}],13:[function(require,module,exports){
+},{"../../utility/custom-media-manager":25,"../../views/main/editor":88}],13:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
@@ -509,13 +528,10 @@ module.exports = Cornerstone.Component.extend({
 			expansion: new Cornerstone.InspectionSupervisor(),
 		};
 
-		this.clearElement();
-		this.clearChildElement();
+		this.resetInspector( 'primary');
 
 		this.listenTo( cs.events, 'inspect:element', this.inspectElement );
 		this.listenTo( cs.events, 'inspect:child:element', this.inspectChildElement );
-		this.listenTo( cs.events, 'inspect:clear', this.clearElement );
-		this.listenTo( cs.events, 'inspect:child:clear', this.clearChildElement );
 
 		this.listenTo( cs.events, 'expand:control', this.expansionSource );
 		this.listenTo( cs.events, 'expand:close', this.expansionClose );
@@ -533,21 +549,14 @@ module.exports = Cornerstone.Component.extend({
 		this.updateInspector( 'secondary', model );
 	},
 
-	clearElement: function() {
-		this.clearChildElement();
-		this.resetInspector( 'primary' );
-	},
-
-	clearChildElement: function() {
-		this.resetInspector( 'secondary' );
-	},
-
 	resetInspector:function( mode ) {
 
-		this.updateInspector( mode, new Cornerstone.Models.Proxyable(), [], [] );
-
-		if ( mode == 'primary' )
+		if ( mode == 'primary' ) {
+			this.resetInspector( 'secondary' )
 			this.setHeading( false );
+		}
+
+		this.updateInspector( mode, new Cornerstone.Models.Proxyable(), [], [] );
 
 	},
 
@@ -567,6 +576,9 @@ module.exports = Cornerstone.Component.extend({
 
 		if (!this.inspect[level]) return;
 
+		this.listenToOnce( source, 'destroy', _.bind( function( newSource ) {
+			this.resetInspector( level );
+		}, this ) );
 
 		this.listenToOnce( source, 'column:change', _.bind( function( newSource ) {
 			this.updateInspector( level, newSource );
@@ -899,7 +911,6 @@ module.exports = Cornerstone.Component.extend({
 		});
 
 		this.listenTo(  cs.global, 'auto:focus', _.debounce( function( key ){
-			console.log('FOCUS',key);
 			cs.navigate.reply( 'auto:focus', key );
 			cs.navigate.trigger( 'auto:focus', key );
 		},10, true ) );
@@ -1220,6 +1231,37 @@ module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
 
+		this.toggle( false, true );
+
+		cs.data.reply( 'skeleton-mode', false );
+		this.listenTo( cs.keybind, 'skeleton-mode', function(){
+			this.toggle();
+		} )
+
+	},
+
+	toggle: function( state, silent ) {
+
+		if ( _.isUndefined( state ) )
+			state = !this.enabled;
+
+		this.enabled = state;
+
+		cs.data.reply( 'skeleton-mode', this.enabled );
+
+		if (!silent)
+			cs.events.trigger( 'toggle:skeleton:mode', this.enabled );
+
+		Backbone.$('body').toggleClass('cs-skeleton-active', this.enabled ).toggleClass('cs-skeleton-inactive', !this.enabled );
+
+	}
+
+});
+},{}],22:[function(require,module,exports){
+module.exports = Cornerstone.Component.extend({
+
+	initialize: function() {
+
 		cs.templates = Backbone.Radio.channel( 'cs:templates' );
 
 		this.templates = new Cornerstone.Collections.Template();
@@ -1368,7 +1410,7 @@ module.exports = Cornerstone.Component.extend({
   }
 
 });
-},{}],22:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 module.exports = {
 
 	// Common
@@ -1391,11 +1433,12 @@ module.exports = {
 	'post-handler'     : require('./editor/post-handler'),
 	'settings'         : require('./editor/settings'),
 	'template-manager' : require('./editor/template-manager'),
+	'skeleton'         : require('./editor/skeleton'),
 
 	// Preview
 	'preview' : require('./preview/preview'),
 }
-},{"./common/builder":5,"./common/keybindings":6,"./common/mn-extensions":7,"./common/model-loader":8,"./common/render-queue":9,"./common/template-loader":10,"./common/view-loader":11,"./editor/editor":12,"./editor/inspector":13,"./editor/layout":16,"./editor/layout-section":14,"./editor/layout-templates":15,"./editor/navigator":17,"./editor/options":18,"./editor/post-handler":19,"./editor/settings":20,"./editor/template-manager":21,"./preview/preview":23}],23:[function(require,module,exports){
+},{"./common/builder":5,"./common/keybindings":6,"./common/mn-extensions":7,"./common/model-loader":8,"./common/render-queue":9,"./common/template-loader":10,"./common/view-loader":11,"./editor/editor":12,"./editor/inspector":13,"./editor/layout":16,"./editor/layout-section":14,"./editor/layout-templates":15,"./editor/navigator":17,"./editor/options":18,"./editor/post-handler":19,"./editor/settings":20,"./editor/skeleton":21,"./editor/template-manager":22,"./preview/preview":24}],24:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function( options ) {
@@ -1445,6 +1488,9 @@ module.exports = Cornerstone.Component.extend({
 		this.view.render();
 
 		this.listenToOnce( cs.render, 'primed', this.primed );
+		_.delay( _.bind( function(){
+			this.primed( true );
+		}, this ), 9000 );
     this.listenTo( cs.global, 'settings:ready', this.settingsPingback );
     this.listenTo( cs.global, 'update:custom_css', this.customCSS );
     this.listenTo( cs.global, 'update:responsive_text', this.responsiveText );
@@ -1455,10 +1501,11 @@ module.exports = Cornerstone.Component.extend({
 
   },
 
-  primed: function() {
-		if ( cs.global.request( 'editor:ready' ) )
+  primed: function( late ) {
+		if ( this.isPrimed || cs.global.request( 'editor:ready' ) )
 			return;
-		cs.global.trigger( 'preview:primed' );
+		this.isPrimed = true;
+		cs.global.trigger( 'preview:primed', late || false );
 	},
 
   settingsPingback: function(){
@@ -1514,7 +1561,7 @@ module.exports = Cornerstone.Component.extend({
   }
 
 });
-},{"../../views/main/preview.js":91}],24:[function(require,module,exports){
+},{"../../views/main/preview.js":92}],25:[function(require,module,exports){
 var media = wp.media;
 var l10n = media.view.l10n;
 wp.media.view.MediaFrame.Cornerstone = wp.media.view.MediaFrame.Post.extend({
@@ -1837,7 +1884,7 @@ wp.media.view.MediaFrame.Cornerstone = wp.media.view.MediaFrame.Post.extend({
 //   }
 
 // });
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 (function($){
 
     var $shadow = $('<div class="shadow-height" style="position:absolute;top:-100%;visibility:hidden;"></div>');
@@ -1861,7 +1908,7 @@ wp.media.view.MediaFrame.Cornerstone = wp.media.view.MediaFrame.Post.extend({
     };
 
 })(jQuery);
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 /**
  * Custom Renderer using Cornerstone precompiled templates as a source
  * Includes global template helpers
@@ -1898,7 +1945,7 @@ module.exports = {
     return templateFunc( _.extend( data, this.templateHelpers ) );
   }
 }
-},{"./template-helpers":29}],27:[function(require,module,exports){
+},{"./template-helpers":30}],28:[function(require,module,exports){
 module.exports.layoutIsValid = function( layout ) {
 	return _([ '1/1','1/2 + 1/2','2/3 + 1/3','1/3 + 2/3','1/3 + 1/3 + 1/3','3/4 + 1/4','1/4 + 3/4','1/2 + 1/2','1/2 + 1/4 + 1/4','1/4 + 1/2 + 1/4','1/4 + 1/4 + 1/2','1/4 + 1/4 + 1/4 + 1/4','4/5 + 1/5','1/5 + 4/5','3/5 + 2/5','2/5 + 3/5','3/5 + 1/5 + 1/5','1/5 + 3/5 + 1/5','1/5 + 1/5 + 3/5','2/5 + 2/5 + 1/5','2/5 + 1/5 + 2/5','1/5 + 2/5 + 2/5','2/5 + 1/5 + 1/5 + 1/5','1/5 + 2/5 + 1/5 + 1/5','1/5 + 1/5 + 2/5 + 1/5','1/5 + 1/5 + 1/5 + 2/5','1/5 + 1/5 + 1/5 + 1/5 + 1/5','5/6 + 1/6','1/6 + 5/6','2/3 + 1/3','1/3 + 2/3','2/3 + 1/6 + 1/6','1/6 + 2/3 + 1/6','1/6 + 1/6 + 2/3','1/2 + 1/2','1/2 + 1/3 + 1/6','1/2 + 1/6 + 1/3','1/3 + 1/2 + 1/6','1/3 + 1/6 + 1/2','1/6 + 1/2 + 1/3','1/6 + 1/3 + 1/2','1/2 + 1/6 + 1/6 + 1/6','1/6 + 1/2 + 1/6 + 1/6','1/6 + 1/6 + 1/2 + 1/6','1/6 + 1/6 + 1/6 + 1/2','1/3 + 1/3 + 1/3','1/3 + 1/3 + 1/6 + 1/6','1/3 + 1/6 + 1/3 + 1/6','1/3 + 1/6 + 1/6 + 1/3','1/6 + 1/3 + 1/3 + 1/6','1/6 + 1/3 + 1/6 + 1/3','1/6 + 1/6 + 1/3 + 1/3','1/3 + 1/6 + 1/6 + 1/6 + 1/6','1/6 + 1/3 + 1/6 + 1/6 + 1/6','1/6 + 1/6 + 1/3 + 1/6 + 1/6','1/6 + 1/6 + 1/6 + 1/3 + 1/6','1/6 + 1/6 + 1/6 + 1/6 + 1/3','1/6 + 1/6 + 1/6 + 1/6 + 1/6 + 1/6' ])
 				  .contains( layout );
@@ -1913,11 +1960,11 @@ module.exports.reduceFractions = function( replace ) {
   });
   return string;
 }
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 String.prototype.replaceAll = function (find, replace) {
   return this.replace(new RegExp(find.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, "\\$1"), 'g'), replace);
 }
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 var TemplateHelpers = {
 	/**
 	 * Wrapper for global l18n
@@ -1959,7 +2006,7 @@ if ( cs.debug() ) {
 
 module.exports = TemplateHelpers;
 
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 module.exports = CS.Mn.CompositeView.extend({
 	tagName: 'li',
 	template: 'controls/base',
@@ -2050,7 +2097,7 @@ module.exports = CS.Mn.CompositeView.extend({
 				if (negate) conditionName = conditionName.replace(':not','');
 
         if ( conditionName.indexOf('parent:') == 0 ) {
-          source = this.proxy.getParent();
+          source = this.proxy.getSourceParent().toProxy();
           conditionName = conditionName.replace('parent:','');
         } else {
           source = this.proxy;
@@ -2206,7 +2253,7 @@ module.exports = CS.Mn.CompositeView.extend({
   },
 
 });
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-breadcrumbs cs-control-divider',
@@ -2285,7 +2332,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 	module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'choose',
 	binding: {
@@ -2339,7 +2386,7 @@ module.exports = CS.Mn.ItemView.extend({
     }
   }
 });
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'div',
 	className: 'cs-control-external cs-control-code-editor',
@@ -2379,13 +2426,13 @@ module.exports = CS.Mn.ItemView.extend({
 	}
 
 });
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 controlName: 'color',
 	binding: {
 		initialize: function($el, model, options) {
 
-			this.$('.cs-color-input').wpColorPicker({
+			this.$('.cs-color-input').val(model.get( options.observe )).wpColorPicker({
 				width: 258,
 				change: function( event, ui ) {
 					this.click = true;
@@ -2405,12 +2452,7 @@ controlName: 'color',
 					this.click = false; return;
 				}
 
-				$picker = this.$('.cs-color-input');
-				if ( !$picker.hasClass('wp-color-picker') ) {
-					return;
-				}
-
-				$picker.wpColorPicker( 'color', model.get(options.observe) );
+				this.$('.cs-color-input').wpColorPicker( 'color', model.get(options.observe) );
 
 			}, this );
 
@@ -2418,14 +2460,18 @@ controlName: 'color',
 			* Set the initial active state, then listen to model changes to change the state later
 			*/
 
-			setActive( model, model.get( options.observe ) );
-
 			this.listenTo(model, 'change:' + options.observe, setActive );
 
 		}
 	},
+
+	onBeforeDestroy: function() {
+		// Close the color picker manually.
+		// https://core.trac.wordpress.org/ticket/32856
+		this.$('.cs-color-input').wpColorPicker('close');
+	}
 });
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -2461,14 +2507,23 @@ module.exports = CS.Mn.ItemView.extend({
   },
 
 });
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 module.exports = CS.Mn.CollectionView.extend({
 	tagName: 'ul',
 
 	className: 'cs-controls',
 
 	initialize: function() {
-		this.repaint = _.debounce( _.bind( this.render, this ), 4 );
+		this.repaint = _.debounce( _.bind( function(){
+
+			try {
+				this.render()
+			} catch (e) {
+				if ( e.name == 'ViewDestroyedError' ) return;
+				console.log('Cornerstone Render Exception', e );
+			}
+
+		}, this ), 4 );
 		this.listenTo( this.collection, 'add', this.repaint );
 		this.listenTo( this.collection, 'remove', this.repaint );
 		this.listenTo( this.collection, 'reset', this.repaint );
@@ -2501,7 +2556,7 @@ module.exports = CS.Mn.CollectionView.extend({
   }
 
 })
-},{}],37:[function(require,module,exports){
+},{}],38:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	template: 'controls/custom-markup',
 	controlName: 'custom-markup',
@@ -2511,7 +2566,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 		return { message: message };
 	},
 });
-},{}],38:[function(require,module,exports){
+},{}],39:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'dimensions',
 	binding: {
@@ -2620,7 +2675,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
     }
 	}
 });
-},{}],39:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
   controlName: 'editor',
   controlTemplate: 'controls/textarea',
@@ -2727,7 +2782,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   }
 
 });
-},{}],40:[function(require,module,exports){
+},{}],41:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -2765,7 +2820,7 @@ module.exports = CS.Mn.ItemView.extend({
   },
 
 });
-},{}],41:[function(require,module,exports){
+},{}],42:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'icon-choose',
   childViewContainer: 'ul.cs-choose',
@@ -2851,7 +2906,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 
         if ( !selection || selection == '' ) return;
 
-        this.$prevIcon = this.$('.cs-icons-inner li[data-choice=' + selection + ']')
+        this.$prevIcon = this.$('.cs-icons-inner li[data-choices~=' + selection + ']')
         this.$prevIcon.addClass('active');
 
         var pos = this.$prevIcon.position();
@@ -2867,6 +2922,8 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
        * Set the initial active state, then listen to model changes to change the state later
        */
 
+      //setActive( model, model.get( options.observe ), false );
+
       this.on('deferred:render', function(){
         setActive( model, model.get( options.observe ) );
       });
@@ -2879,10 +2936,13 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 
   onRender: function() {
 
-    this.$('.cs-icons-inner').perfectScrollbar({
-      scrollYMarginOffset: 10,
-      wheelPropagation: true
-    });
+  	this.$('ul.cs-choose').empty();
+
+    var count = 0;
+    _.each( this.filteredIcons, function( words, code ) {
+      if ( count++ > 20) return;
+      this.$('ul.cs-choose').append( cs.template('controls/icon-choose-item')({ code: code, choice: words[0], choices: words.join(' ') }) );
+    }, this );
 
     // Outputting the icons takes a moment, so let's do that pseudo-asynch
     _.defer( _.bind( this.deferRender, this ) );
@@ -2890,18 +2950,24 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   },
 
   deferRender: function() {
+
     this.$('ul.cs-choose').empty();
 
     _.each( this.filteredIcons, function( words, code ) {
-      this.$('ul.cs-choose').append( cs.template('controls/icon-choose-item')({ code: code, choice: words[0] }) );
+      this.$('ul.cs-choose').append( cs.template('controls/icon-choose-item')({ code: code, choice: words[0], choices: words.join(' ') }) );
     }, this );
 
-    this.$('.cs-icons-inner').perfectScrollbar('update');
+    this.$('.cs-icons-inner').perfectScrollbar({
+      scrollYMarginOffset: 10,
+      wheelPropagation: true
+    });
+
+    //this.$('.cs-icons-inner').perfectScrollbar('update');
     this.trigger('deferred:render');
   }
 
 });
-},{}],42:[function(require,module,exports){
+},{}],43:[function(require,module,exports){
 
 var ImageControl =  Cornerstone.ControlViews.Base.extend({
   controlName: 'image',
@@ -2993,7 +3059,7 @@ var ImageControl =  Cornerstone.ControlViews.Base.extend({
 });
 
 module.exports = ImageControl;
-},{}],43:[function(require,module,exports){
+},{}],44:[function(require,module,exports){
 module.exports = {
 
 	// General Purpose
@@ -3041,7 +3107,7 @@ module.exports = {
 	'template-save-dialog'    : require('./layout/template-save-dialog'),
 	'template-upload-dialog'  : require('./layout/template-upload-dialog')
 }
-},{"./breadcrumbs":31,"./choose":32,"./code-editor":33,"./color":34,"./column-actions":35,"./custom-markup":37,"./dimensions":38,"./editor":39,"./element-actions":40,"./icon-choose":41,"./image":42,"./info-box":44,"./layout/column-layout":45,"./layout/column-order":47,"./layout/layout-actions":48,"./layout/sortable-rows":49,"./layout/sortable-sections":50,"./layout/template-actions":51,"./layout/template-remove":52,"./layout/template-save-dialog":53,"./layout/template-select":54,"./layout/template-upload-dialog":55,"./multi-choose":56,"./number":57,"./row-actions":58,"./section-actions":59,"./select":60,"./settings-actions":61,"./sortable":64,"./text":65,"./textarea":66,"./title":67,"./toggle":68,"./wpselect":69}],44:[function(require,module,exports){
+},{"./breadcrumbs":32,"./choose":33,"./code-editor":34,"./color":35,"./column-actions":36,"./custom-markup":38,"./dimensions":39,"./editor":40,"./element-actions":41,"./icon-choose":42,"./image":43,"./info-box":45,"./layout/column-layout":46,"./layout/column-order":48,"./layout/layout-actions":49,"./layout/sortable-rows":50,"./layout/sortable-sections":51,"./layout/template-actions":52,"./layout/template-remove":53,"./layout/template-save-dialog":54,"./layout/template-select":55,"./layout/template-upload-dialog":56,"./multi-choose":57,"./number":58,"./row-actions":59,"./section-actions":60,"./select":61,"./settings-actions":62,"./sortable":65,"./text":66,"./textarea":67,"./title":68,"./toggle":69,"./wpselect":70}],45:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	template: 'controls/info-box',
 	controlName: 'info-box',
@@ -3051,7 +3117,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 		this.$el.toggleClass( 'hide', !cs.options.request( 'help:text' ) );
 	}
 });
-},{}],45:[function(require,module,exports){
+},{}],46:[function(require,module,exports){
 var RowValidator = require('../../../utility/row-validator');
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'column-layout',
@@ -3167,7 +3233,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 	}
 
 });
-},{"../../../utility/row-validator":27}],46:[function(require,module,exports){
+},{"../../../utility/row-validator":28}],47:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
 	template: 'controls/column-order-item',
@@ -3216,7 +3282,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 })
-},{}],47:[function(require,module,exports){
+},{}],48:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
@@ -3263,7 +3329,7 @@ module.exports = Sortable.extend({
 
 
 });
-},{"../sortable":64,"./column-order-item":46}],48:[function(require,module,exports){
+},{"../sortable":65,"./column-order-item":47}],49:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -3294,7 +3360,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{}],49:[function(require,module,exports){
+},{}],50:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
@@ -3351,7 +3417,7 @@ module.exports = Sortable.extend({
   }
 
 });
-},{"../sortable":64}],50:[function(require,module,exports){
+},{"../sortable":65}],51:[function(require,module,exports){
 var Sortable = require('../sortable');
 module.exports = Sortable.extend({
 
@@ -3371,7 +3437,7 @@ module.exports = Sortable.extend({
   }
 
 });
-},{"../sortable":64}],51:[function(require,module,exports){
+},{"../sortable":65}],52:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-template-actions cs-control-divider',
@@ -3403,7 +3469,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{}],52:[function(require,module,exports){
+},{}],53:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
   //template: 'layout/sub-templates/template-select',
   controlName: 'template-select',
@@ -3434,7 +3500,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   },
 
 });
-},{}],53:[function(require,module,exports){
+},{}],54:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 
   template: 'layout/sub-templates/save-dialog',
@@ -3488,7 +3554,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   }
 
 });
-},{}],54:[function(require,module,exports){
+},{}],55:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	//template: 'layout/sub-templates/template-select',
   controlName: 'template-select',
@@ -3535,7 +3601,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 
 
 });
-},{}],55:[function(require,module,exports){
+},{}],56:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 
   template: 'layout/sub-templates/upload-dialog',
@@ -3614,7 +3680,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   }
 
 });
-},{}],56:[function(require,module,exports){
+},{}],57:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'multi-choose',
   controlTemplate: 'controls/choose',
@@ -3673,12 +3739,12 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
     }
   }
 });
-},{}],57:[function(require,module,exports){
+},{}],58:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'number',
 	bindingSelector: 'input[type=number]'
 });
-},{}],58:[function(require,module,exports){
+},{}],59:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -3712,13 +3778,11 @@ module.exports = CS.Mn.ItemView.extend({
   onConfirmAccept: function() {
     cs.elements.trigger( 'delete', { model: this.proxy.getSource(), success: function() {
       cs.confirm.trigger( 'complete' );
-      cs.events.trigger( 'inspect:clear' );
-    	cs.navigate.trigger( 'inspector:home' );
     } } );
   },
 
 });
-},{}],59:[function(require,module,exports){
+},{}],60:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -3752,13 +3816,11 @@ module.exports = CS.Mn.ItemView.extend({
   onConfirmAccept: function() {
     cs.elements.trigger( 'delete', { model: this.proxy.getSource(), success: function() {
       cs.confirm.trigger( 'complete' );
-      cs.events.trigger( 'inspect:clear' );
-    	cs.navigate.trigger( 'inspector:home' );
     } } );
   },
 
 });
-},{}],60:[function(require,module,exports){
+},{}],61:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'select',
 	bindingSelector: 'select',
@@ -3775,7 +3837,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 		}, this );
 	}
 });
-},{}],61:[function(require,module,exports){
+},{}],62:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	tagName: 'li',
   className: 'cs-control cs-control-actions cs-control-divider',
@@ -3824,7 +3886,7 @@ module.exports = CS.Mn.ItemView.extend({
   },
 
 });
-},{}],62:[function(require,module,exports){
+},{}],63:[function(require,module,exports){
 var SortableItem = require('./sortable-item');
 
 module.exports = SortableItem.extend({
@@ -3846,7 +3908,7 @@ module.exports = SortableItem.extend({
   },
 
 });
-},{"./sortable-item":63}],63:[function(require,module,exports){
+},{"./sortable-item":64}],64:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 
   tagName: 'li',
@@ -3913,7 +3975,7 @@ module.exports = CS.Mn.ItemView.extend({
   },
 
 });
-},{}],64:[function(require,module,exports){
+},{}],65:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'sortable',
 	childViewContainer: 'ul',
@@ -4068,7 +4130,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   },
 
 });
-},{"./sortable-item":63,"./sortable-item-wide":62}],65:[function(require,module,exports){
+},{"./sortable-item":64,"./sortable-item-wide":63}],66:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'text',
 	bindingSelector: 'input[type=text]',
@@ -4081,7 +4143,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 			this.$('input[type=text]').attr('placeholder', options.placeholder );
 	}
 });
-},{}],66:[function(require,module,exports){
+},{}],67:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'textarea',
 	bindingSelector: 'textarea',
@@ -4098,7 +4160,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
       this.$('textarea').attr('placeholder', options.placeholder );
   }
 });
-},{}],67:[function(require,module,exports){
+},{}],68:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'title',
 	divider: true,
@@ -4119,7 +4181,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
   }
 
 });
-},{}],68:[function(require,module,exports){
+},{}],69:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'toggle',
   binding: {
@@ -4149,7 +4211,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
     }
   }
 })
-},{}],69:[function(require,module,exports){
+},{}],70:[function(require,module,exports){
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'wpselect',
 	bindingSelector: 'select',
@@ -4163,7 +4225,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 		this.$( '.cs-wp-select' ).append( this.$select );
 	}
 });
-},{}],70:[function(require,module,exports){
+},{}],71:[function(require,module,exports){
 var BaseShared = {
 	template: 'loading',
 	className: 'cs-preview-element-wrapper',
@@ -4330,7 +4392,7 @@ module.exports.Base = CS.Mn.CompositeView.extend( _.extend( BaseShared, {
 	},
 
 } ) );
-},{}],71:[function(require,module,exports){
+},{}],72:[function(require,module,exports){
 // Confirm
 module.exports = CS.Mn.ItemView.extend({
   className: 'cs-confirm',
@@ -4399,7 +4461,7 @@ module.exports = CS.Mn.ItemView.extend({
   },
 
 });
-},{}],72:[function(require,module,exports){
+},{}],73:[function(require,module,exports){
 // Expand
 module.exports = CS.Mn.ItemView.extend({
   tagName: 'button',
@@ -4434,7 +4496,7 @@ module.exports = CS.Mn.ItemView.extend({
 
   }
 });
-},{}],73:[function(require,module,exports){
+},{}],74:[function(require,module,exports){
 // Expansion
 var ControlListView = require('../controls/control-collection')
 
@@ -4492,7 +4554,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{"../controls/control-collection":36}],74:[function(require,module,exports){
+},{"../controls/control-collection":37}],75:[function(require,module,exports){
 // Home
 module.exports = CS.Mn.ItemView.extend({
   className: 'cs-home',
@@ -4515,7 +4577,7 @@ module.exports = CS.Mn.ItemView.extend({
     return data;
   }
 });
-},{}],75:[function(require,module,exports){
+},{}],76:[function(require,module,exports){
 // Options
 
 module.exports = CS.Mn.CompositeView.extend({
@@ -4529,7 +4591,7 @@ module.exports = CS.Mn.CompositeView.extend({
   }
 
 });
-},{}],76:[function(require,module,exports){
+},{}],77:[function(require,module,exports){
 // Respond
 module.exports = CS.Mn.ItemView.extend({
   className: 'cs-respond',
@@ -4575,7 +4637,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{}],77:[function(require,module,exports){
+},{}],78:[function(require,module,exports){
 // SaveComplete
 module.exports = CS.Mn.ItemView.extend({
   className: 'cs-saved',
@@ -4614,13 +4676,13 @@ module.exports = CS.Mn.ItemView.extend({
 
 });
 
-},{}],78:[function(require,module,exports){
+},{}],79:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
   tagName: 'li',
   className: 'cs-control-empty',
   template: 'inspector/blank-state',
 });
-},{}],79:[function(require,module,exports){
+},{}],80:[function(require,module,exports){
 // InspectorPane
 var ControlListView = require('../controls/control-collection');
 var ViewBasePane = require('../main/base-pane');
@@ -4662,7 +4724,7 @@ module.exports = ViewBasePane.extend({
   }
 
 });
-},{"../controls/control-collection":36,"../main/base-pane":86,"./empty-controls":78}],80:[function(require,module,exports){
+},{"../controls/control-collection":37,"../main/base-pane":87,"./empty-controls":79}],81:[function(require,module,exports){
 var ControlListView = require('../controls/control-collection')
 var ViewBasePane = require('../main/base-pane');
 module.exports = ViewBasePane.extend({
@@ -4684,7 +4746,7 @@ module.exports = ViewBasePane.extend({
   },
 
 });
-},{"../controls/control-collection":36,"../main/base-pane":86,"./sub-row/layout-sub-rows":81,"./sub-templates/layout-sub-templates":82}],81:[function(require,module,exports){
+},{"../controls/control-collection":37,"../main/base-pane":87,"./sub-row/layout-sub-rows":82,"./sub-templates/layout-sub-templates":83}],82:[function(require,module,exports){
 // RowSubPane
 var ViewControlCollection = require('../../controls/control-collection')
 
@@ -4790,7 +4852,7 @@ module.exports = CS.Mn.LayoutView.extend({
   },
 
 });
-},{"../../controls/control-collection":36}],82:[function(require,module,exports){
+},{"../../controls/control-collection":37}],83:[function(require,module,exports){
 // TemplatesSubPane
 var ViewControlCollection = require('../../controls/control-collection')
 
@@ -4813,7 +4875,7 @@ module.exports = CS.Mn.LayoutView.extend({
   },
 
 });
-},{"../../controls/control-collection":36}],83:[function(require,module,exports){
+},{"../../controls/control-collection":37}],84:[function(require,module,exports){
 var ViewBasePane = require('../main/base-pane')
 module.exports = ViewBasePane.extend({
   name: 'elements',
@@ -4837,7 +4899,7 @@ module.exports = ViewBasePane.extend({
     this.$('#elements-search').focus();
   }
 });
-},{"../main/base-pane":86,"./library-list":85}],84:[function(require,module,exports){
+},{"../main/base-pane":87,"./library-list":86}],85:[function(require,module,exports){
 // ElementLibraryItem
 
 module.exports = CS.Mn.ItemView.extend({
@@ -4882,7 +4944,7 @@ module.exports = CS.Mn.ItemView.extend({
 	}
 
 });
-},{}],85:[function(require,module,exports){
+},{}],86:[function(require,module,exports){
 module.exports = CS.Mn.CollectionView.extend({
 	tagName: 'ul',
 	className: 'cs-elements',
@@ -4919,7 +4981,7 @@ module.exports = CS.Mn.CollectionView.extend({
 		this.query = '';
 	}
 });
-},{"./element-stub":84}],86:[function(require,module,exports){
+},{"./element-stub":85}],87:[function(require,module,exports){
 // BasePane
 var BasePane = CS.Mn.LayoutView.extend({
 
@@ -4999,12 +5061,13 @@ var BasePane = CS.Mn.LayoutView.extend({
 
 module.exports = BasePane;
 
-},{}],87:[function(require,module,exports){
+},{}],88:[function(require,module,exports){
 // Editor
 
 var ViewHeader    = require('./header')
   , ViewFooter    = require('./footer')
-  , ViewExpansion = require('../extra/expansion');
+  , ViewExpansion = require('../extra/expansion')
+  , ViewSkeleton  = require('./skeleton');
 
 module.exports = CS.Mn.LayoutView.extend({
 
@@ -5015,6 +5078,7 @@ module.exports = CS.Mn.LayoutView.extend({
     Pane:   '#pane',
     Footer: '#footer',
     Expansion: '#expand',
+    Skeleton: '#skeleton',
   },
 
   panes: {
@@ -5052,15 +5116,18 @@ module.exports = CS.Mn.LayoutView.extend({
     var prevPane = localStorage['CornerstonePane'];
     localStorage['CornerstonePane'] = false;
 
+    cs.data.reply('scrollbar:width', this.getScrollbarWidth() );
+
     this.changePane( _.has( this.panes, prevPane ) ? prevPane : 'layout' );
     this.Header.show( new ViewHeader() );
     this.Footer.show( new ViewFooter() );
     this.Expansion.show( new ViewExpansion() );
+    this.Skeleton.show( new ViewSkeleton( { model: cs.post.data } ) );
 
     this.Expansion.$el.detach();
     this.$el.after(this.Expansion.$el);
-
-    cs.data.reply('scrollbar:width', this.getScrollbarWidth() );
+    this.Skeleton.$el.detach();
+    //this.$el.after(this.Skeleton.$el);
 
     this.setEditorPosition();
   },
@@ -5173,7 +5240,7 @@ module.exports = CS.Mn.LayoutView.extend({
   }
 
 });
-},{"../extra/expansion":73,"../inspector/inspector":79,"../layout/layout":80,"../library/element-library":83,"../settings/settings":109,"./footer":88,"./header":89}],88:[function(require,module,exports){
+},{"../extra/expansion":74,"../inspector/inspector":80,"../layout/layout":81,"../library/element-library":84,"../settings/settings":111,"./footer":89,"./header":90,"./skeleton":93}],89:[function(require,module,exports){
 var ViewExpand  = require('../extra/expand')
   , ViewConfirm = require('../extra/confirm')
   , ViewHome    = require('../extra/home')
@@ -5358,7 +5425,7 @@ module.exports = CS.Mn.ItemView.extend({
   }
 
 });
-},{"../extra/confirm":71,"../extra/expand":72,"../extra/home":74,"../extra/options":75,"../extra/respond":76,"../extra/save-complete":77}],89:[function(require,module,exports){
+},{"../extra/confirm":72,"../extra/expand":73,"../extra/home":75,"../extra/options":76,"../extra/respond":77,"../extra/save-complete":78}],90:[function(require,module,exports){
 // EditorHeader
 module.exports = CS.Mn.ItemView.extend({
   tagName: 'nav',
@@ -5399,7 +5466,7 @@ module.exports = CS.Mn.ItemView.extend({
     this.$( '.' + pane ).addClass('active').siblings().removeClass('active');
   }
 });
-},{}],90:[function(require,module,exports){
+},{}],91:[function(require,module,exports){
 module.exports = CS.Mn.ItemView.extend({
 	template: 'observer',
 	className: 'cs-observer',
@@ -5448,6 +5515,8 @@ module.exports = CS.Mn.ItemView.extend({
 	},
 
 	setTooltip: function( model, type, flags ) {
+
+		var text;
 
 		switch ( type ) {
       case 'section':
@@ -5623,7 +5692,7 @@ module.exports = CS.Mn.ItemView.extend({
 
 	// }
 });
-},{}],91:[function(require,module,exports){
+},{}],92:[function(require,module,exports){
 module.exports = Cornerstone.Mn.CompositeView.extend({
 
 	template: false,
@@ -5657,6 +5726,7 @@ module.exports = Cornerstone.Mn.CompositeView.extend({
 
 		this.listenTo(  cs.global, 'set:collapse', this.toggleCollapse );
 		this.listenTo(  cs.global, 'dragging', this.toggleDragging );
+		this.listenTo(  cs.preview, 'dragging', this.toggleDragging );
 
 		 this.listenTo( cs.preview, 'autoscroll', _.debounce( _.bind( this.autoScroll, this ), 250, true ) );
 
@@ -5708,7 +5778,36 @@ module.exports = Cornerstone.Mn.CompositeView.extend({
 	},
 
 });
-},{"./observer.js":90}],92:[function(require,module,exports){
+},{"./observer.js":91}],93:[function(require,module,exports){
+module.exports = CS.Mn.CompositeView.extend({
+
+  template: 'main/skeleton',
+  childViewContainer: '.cs-skeleton-content-inner',
+
+  getChildView: function( item ) {
+		return cs.component('view-loader').skeletonLookup( item.get('_type') );
+	},
+
+	initialize: function() {
+		this.collection = this.model.elements;
+		this.listenTo( this.collection, 'sort', this.render );
+	},
+
+	onRender: function() {
+
+		this.$('.cs-skeleton-content-inner').perfectScrollbar({
+      scrollYMarginOffset: 10,
+      wheelPropagation: true
+    });
+    _.defer( _.bind( this.deferRender, this ) );
+	},
+
+	deferRender: function() {
+		this.$('.cs-skeleton-content-inner').perfectScrollbar('update');
+	}
+
+});
+},{}],94:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	toggle: function( e ) {
@@ -5737,7 +5836,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 	},
 
 });
-},{}],93:[function(require,module,exports){
+},{}],95:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	elementEvents: {
@@ -5748,7 +5847,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 		e.preventDefault();
 	}
 });
-},{}],94:[function(require,module,exports){
+},{}],96:[function(require,module,exports){
 module.exports = CS.Mn.CompositeView.extend( {
 
 	remoteRender: true,
@@ -5802,20 +5901,22 @@ module.exports = CS.Mn.CompositeView.extend( {
 		this._setupChildren();
 
 		this._repaint = _.debounce( _.bind( function() {
-			if ( this.isDestroyed ) return;
-			this.render();
+			try {
+				this.render()
+			} catch (e) {
+				if ( e.name == 'ViewDestroyedError' ) return;
+				console.log('Cornerstone Render Exception', e );
+			}
 		}, this ), 5 );
 
-		this._updateMarkup = _.debounce( _.bind( function() {
-			this.__updateMarkup();
-		}, this ), 5 );
+		this._updateMarkup = _.debounce( _.bind( this.__updateMarkup, this ), 5 );
 
 		if ( this.model.collection )
 			this.modelIndex = this.model.collection.indexOf( this.model );
 
 
 		this._updateMarkup();
-		this.listenTo( this.model, 'change', this._updateMarkup );
+		this.listenTo( this.model, 'change', this._updateMarkupOnChange );
 		this.listenTo( this.model, 'remote:render', this._repaint );
 		this.on( 'render', this._baseRender );
 
@@ -5859,6 +5960,12 @@ module.exports = CS.Mn.CompositeView.extend( {
 
 	_updateManagedChild: function() {
 		this.model.trigger( 'update:child:data' );
+		this._updateMarkup();
+	},
+
+	_updateMarkupOnChange: function( model ) {
+		if ( _.isEmpty( _.omit( model.changed, ['rank'] ) ) )
+			return;
 		this._updateMarkup();
 	},
 
@@ -5920,10 +6027,31 @@ module.exports = CS.Mn.CompositeView.extend( {
     if ( this.remoteRender ) {
       _.defer( _.bind( function(){
       	if ( this._emptyDetection() ) {
-					this.$el.html( CS.Mn.Renderer.render( 'empty-element', this.serializeData() ) );
+      		this.triggerMethod( 'render:empty' );
       	}
       }, this ), 0 );
     }
+
+  },
+
+  onRenderEmpty: function() {
+  	this._renderEmpty();
+  },
+
+  _renderEmpty: function() {
+  	this.$el.html( CS.Mn.Renderer.render( 'empty-element', this.serializeData() ) );
+  },
+
+  _emptyDetection: function() {
+
+  	if ( _.isFunction( this.emptyDetection ) )
+  		return this.emptyDetection();
+
+  	if ( this.model.definition.get('flags').empty ) {
+  		return false; // detection handled server side, but aborted here.
+  	}
+
+    return ( this.$el.shadowHeight() < 1 );
 
   },
 
@@ -5973,15 +6101,6 @@ module.exports = CS.Mn.CompositeView.extend( {
   	this.model.trigger('observe:end');
   },
 
-  _emptyDetection: function() {
-
-  	if ( this.model.definition.get('flags').empty ) {
-  		return false; // detection handled server side, but aborted here.
-  	}
-
-    return ( this.$el.shadowHeight() < 1 );
-
-  },
 
   _setData: function ( e ) {
 
@@ -5998,7 +6117,7 @@ module.exports = CS.Mn.CompositeView.extend( {
 	}
 
 } );
-},{}],95:[function(require,module,exports){
+},{}],97:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	onAfterElementRender: function() {
@@ -6009,7 +6128,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	}
 });
-},{}],96:[function(require,module,exports){
+},{}],98:[function(require,module,exports){
 module.exports = Cornerstone.ElementViews.Base.extend({
 
 	remoteRender: false,
@@ -6319,17 +6438,21 @@ module.exports = Cornerstone.ElementViews.Base.extend({
 		}
 
 		this.emptyClassCheck();
+	},
+
+	onRenderEmpty: function() {
+		return false;
 	}
 
 })
-},{}],97:[function(require,module,exports){
+},{}],99:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	template: _.template('<div></div>'),
 
 	remoteRender: false,
 
-	minHeight: 3,
+	minHeight: 10,
 
 	initialize: function() {
 		this.listenTo( this.model, 'change', this.render );
@@ -6368,6 +6491,10 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 			'height'  : 0
 		});
 
+		if ($gap.outerHeight() < this.minHeight) {
+			$gap.css({'padding' : this.minHeight + 'px 0 0'});
+		}
+
 	},
 
 	onAddedToColumn: function() {
@@ -6393,10 +6520,17 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 	}
 
 });
-},{}],98:[function(require,module,exports){
+},{}],100:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
+
+	// Stop "no container" from being detected as empty too early
+	emptyDetection: function() {
+		return false;
+	},
+
 	onAfterElementRender: function(){
 
+		// Handle height preservation between renders to avoid flicker
 		if( this.model.prevHeight ) {
 			this.$('.cs-empty-element').height(this.model.prevHeight);
 			this.model.prevHeight = false;
@@ -6413,7 +6547,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	}
 });
-},{}],99:[function(require,module,exports){
+},{}],101:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	onAfterElementRender: function() {
@@ -6421,7 +6555,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 	}
 
 });
-},{}],100:[function(require,module,exports){
+},{}],102:[function(require,module,exports){
 module.exports = {
 
 	'section' : require('./section'),
@@ -6441,7 +6575,7 @@ module.exports = {
 	// 3rd party
 	'gravity-forms'     : require('./gravity-forms'),
 }
-},{"./accordion":92,"./alert":93,"./card":95,"./column":96,"./gap":97,"./google-map":98,"./gravity-forms":99,"./line":101,"./row":102,"./section":103,"./slider":104,"./tabs":105}],101:[function(require,module,exports){
+},{"./accordion":94,"./alert":95,"./card":97,"./column":98,"./gap":99,"./google-map":100,"./gravity-forms":101,"./line":103,"./row":104,"./section":105,"./slider":106,"./tabs":107}],103:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
   template: _.template('<hr class="x-hr">'),
@@ -6483,7 +6617,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
   },
 
 });
-},{}],102:[function(require,module,exports){
+},{}],104:[function(require,module,exports){
 module.exports = Cornerstone.ElementViews.Base.extend({
 
 	remoteRender: false,
@@ -6553,7 +6687,7 @@ module.exports = Cornerstone.ElementViews.Base.extend({
   }
 
 });
-},{}],103:[function(require,module,exports){
+},{}],105:[function(require,module,exports){
 module.exports = Cornerstone.ElementViews.Base.extend({
 
 	remoteRender: false,
@@ -6715,13 +6849,13 @@ module.exports = Cornerstone.ElementViews.Base.extend({
 	}
 
 })
-},{}],104:[function(require,module,exports){
+},{}],106:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 	// emptyDetection: function() {
  //    // Prevent empty detection
  //  }
 });
-},{}],105:[function(require,module,exports){
+},{}],107:[function(require,module,exports){
 module.exports =  Cornerstone.ElementViews.Base.extend({
 
 	onClickBeforeInspect: function( e ) {
@@ -6732,7 +6866,7 @@ module.exports =  Cornerstone.ElementViews.Base.extend({
 	},
 
 });
-},{}],106:[function(require,module,exports){
+},{}],108:[function(require,module,exports){
 module.exports = CS.Mn.CollectionView.extend({
 	childView: require('./settings-section'),
 	events: {
@@ -6759,7 +6893,7 @@ module.exports = CS.Mn.CollectionView.extend({
 
   }
 });
-},{"./settings-section":108}],107:[function(require,module,exports){
+},{"./settings-section":110}],109:[function(require,module,exports){
 var ControlListView = require('../controls/control-collection');
 var SettingsCollectionView = require('./settings-collection');
 module.exports = CS.Mn.LayoutView.extend({
@@ -6788,7 +6922,7 @@ module.exports = CS.Mn.LayoutView.extend({
   }
 
 });
-},{"../controls/control-collection":36,"./settings-collection":106}],108:[function(require,module,exports){
+},{"../controls/control-collection":37,"./settings-collection":108}],110:[function(require,module,exports){
 module.exports = CS.Mn.CompositeView.extend({
 	template: 'settings/section',
 	className: 'cs-settings-section',
@@ -6812,7 +6946,7 @@ module.exports = CS.Mn.CompositeView.extend({
 
 	}
 });
-},{}],109:[function(require,module,exports){
+},{}],111:[function(require,module,exports){
 var ViewBasePane = require('../main/base-pane');
 var SettingsContentView = require('./settings-content');
 var ControlListView = require('../controls/control-collection');
@@ -6845,7 +6979,168 @@ module.exports = ViewBasePane.extend({
   }
 
 });
-},{"../controls/control-collection":36,"../main/base-pane":86,"./settings-content":107}],110:[function(require,module,exports){
+},{"../controls/control-collection":37,"../main/base-pane":87,"./settings-content":109}],112:[function(require,module,exports){
+module.exports = CS.Mn.CompositeView.extend( {
+
+	remoteRender: true,
+	template: 'main/skeleton-item',
+	childViewContainer: '.cs-skeleton-container',
+	className: 'cs-skeleton-item',
+	draggable: true,
+
+	attributes: function() {
+		return { 'draggable': _.result( this, 'draggable' ) };
+	},
+
+	events: function() {
+
+		var events = {
+		};
+
+		var inspectable = _.result( this, 'inspectable' )
+		if ( inspectable || _.isUndefined( inspectable ) ) {
+
+			events = _.extend( events, {
+				'click': '_click',
+				'mouseover': '_observeStart',
+				'mouseout': '_observeEnd'
+			}, {} );
+
+		}
+
+		var draggable = _.result( this, 'draggable' )
+		if ( draggable || _.isUndefined( draggable ) ) {
+
+			events = _.extend( events, {
+				'dragstart.h5s': '_dragStart',
+				'dragend.h5s': '_dragEnd',
+			} );
+
+		}
+
+		return _.extend( events, _.result( this, 'elementEvents' ) || {} );
+	},
+
+	getChildView: function( item ) {
+		return cs.component('view-loader').skeletonLookup( item.get('_type') );
+	},
+
+	constructor: function( options ) {
+
+		CS.Mn.CompositeView.apply(this, arguments);
+
+		this.collection = this.model.elements;
+		this.listenTo( this.collection, 'sort', this.render );
+
+		if ( this.model.collection )
+			this.modelIndex = this.model.collection.indexOf( this.model );
+
+	},
+
+	serializeData: function() {
+
+		var text;
+
+		switch ( this.model.get('_type')  ) {
+      case 'section':
+        text = cs.l18n('section-format').replace('%s', this.model.get('title') );
+        break;
+      case 'row':
+        text = cs.l18n('row-numeric').replace('%s', this.model.getIndex() + 1 );
+        break;
+      case 'column':
+        text = cs.l18n('column-format').replace('%s', this.model.get('size') );
+        break;
+      default:
+      	text = this.model.definition.get('ui').title;
+      	break;
+    }
+
+    this.tooltipText = text;
+
+		return _.extend( CS.Mn.CompositeView.prototype.serializeData.apply( this, arguments ), {
+			handleText: text
+		} );
+	},
+
+	// serializeData: function() {
+	// 	var base = CS.Mn.CompositeView.prototype.serializeData.apply(this,arguments);
+	// 	var elementData = _.result( this, 'elementData' ) || {};
+	// 	return _.defaults( _.extend( base, elementData ), this.model.getDefaults() );
+	// },
+
+  _click: function( e ) {
+		this.triggerMethod('click:before:inspect', e );
+		e.stopPropagation();
+		cs.global.trigger( 'inspect', this.model )
+  },
+
+	_dragStart: function( e ) {
+		this._setData(e);
+		_.defer( _.bind( this.triggerMethod, this), 'drag:start', e )
+	},
+
+	_dragEnd: function( e ) {
+		cs.preview.trigger( 'dragging', false );
+		if ( e.originalEvent ) this.triggerMethod( 'drag:end', e );
+	},
+
+	_observeStart: function( e ) {
+		e.stopPropagation();
+		this.model.trigger( 'observe:start' );
+  },
+
+  _observeEnd: function( e ) {
+  	this.model.trigger('observe:end');
+  },
+
+  _emptyDetection: function() {
+
+  	if ( this.model.definition.get('flags').empty ) {
+  		return false; // detection handled server side, but aborted here.
+  	}
+
+    return ( this.$el.shadowHeight() < 1 );
+
+  },
+
+  _setData: function ( e ) {
+
+		var dataTransfer = e.originalEvent.dataTransfer;
+    dataTransfer.effectAllowed = 'copy';
+    var data = JSON.stringify({
+			action: 'move',
+    	id: this.model.cid,
+    });
+
+    cs.preview.replyOnce( 'cache:'+ this.model.cid, this.model );
+    dataTransfer.setData( 'cornerstone/element', data );
+
+	}
+
+} );
+},{}],113:[function(require,module,exports){
+module.exports = Cornerstone.SkeletonViews.Base.extend({
+	draggable: false
+});
+},{}],114:[function(require,module,exports){
+module.exports = {
+	'section' : require('./section'),
+	'row'     : require('./row'),
+	'column'  : require('./column'),
+}
+},{"./column":113,"./row":115,"./section":116}],115:[function(require,module,exports){
+module.exports = Cornerstone.SkeletonViews.Base.extend({
+	draggable: false,
+
+	filter: function (child, index, collection) {
+    return ( child.get('_active') );
+  }
+
+});
+},{}],116:[function(require,module,exports){
+arguments[4][113][0].apply(exports,arguments)
+},{"dup":113}],117:[function(require,module,exports){
 var templates={};templates['controls/base']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -7016,8 +7311,8 @@ var __t, __p = '';
 with (obj) {
 __p += '<li title="' +
 ((__t = ( choice )) == null ? '' : __t) +
-'" data-choice="' +
-((__t = ( choice )) == null ? '' : __t) +
+'" data-choices="' +
+((__t = ( choices )) == null ? '' : __t) +
 '"><i class="cs-icon" data-cs-icon="&#x' +
 ((__t = ( code )) == null ? '' : __t) +
 '"></i></li>';
@@ -7404,18 +7699,6 @@ __p += '\n<p class="message">' +
 
 }
 return __p
-};templates['layout/actions']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
-((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
-((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
-
-}
-return __p
 };templates['inspector/blank-state']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -7506,6 +7789,18 @@ __p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i cla
 
 }
 return __p
+};templates['layout/actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
+((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
+((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
+
+}
+return __p
 };templates['library/element-stub']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -7540,7 +7835,7 @@ function print() { __p += __j.call(arguments, '') }
 with (obj) {
 
  //builder/main/editor ;
-__p += '\n<header id="header" class="cs-editor-header"></header>\n<section id="pane"></section>\n<footer id="footer" class="cs-editor-footer"></footer>\n<div id="expand" class="cs-editor-expansion"></div>';
+__p += '\n<header id="header" class="cs-editor-header"></header>\n<section id="pane"></section>\n<div id="skeleton" class="cs-editor-skeleton"></div>\n<footer id="footer" class="cs-editor-footer"></footer>\n<div id="expand" class="cs-editor-expansion"></div>';
 
 }
 return __p
@@ -7610,6 +7905,26 @@ __p += '\n  <div id="content" class="cs-pane-content-inner" style="right:0px;"><
 '">\n  <button class="cs-builder-sub-back">\n    <i class="cs-icon" data-cs-icon="&#xf053;"></i> <span>' +
 ((__t = ( returnButtonText )) == null ? '' : __t) +
 '</span>\n  </button>\n  <div class="cs-pane-content-outer">\n  	<div id="sub" class="cs-pane-content-inner"></div>\n  </div>\n</div>\n\n\n';
+
+}
+return __p
+};templates['main/skeleton-item']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<span class="cs-skeleton-title ' +
+((__t = ( _type )) == null ? '' : __t) +
+'" >' +
+((__t = ( handleText )) == null ? '' : __t) +
+'</span>\n<div class="cs-skeleton-container"></div>';
+
+}
+return __p
+};templates['main/skeleton']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<h2>Skeleton Mode</h2>\n<div class="cs-skeleton-content-outer">\n	<div class="cs-skeleton-content-inner"></div>\n</div>';
 
 }
 return __p
@@ -7713,7 +8028,7 @@ __p += '<input id="template-upload" type="file" name="blockUpload"/>\n<button cl
 }
 return __p
 };module.exports=templates;
-},{}],111:[function(require,module,exports){
+},{}],118:[function(require,module,exports){
 var templates={};templates['dragging-placeholder']=function (obj) {
 obj || (obj = {});
 var __t, __p = '';
@@ -7787,7 +8102,7 @@ __p += '<div class="cs-observer-tooltip top left">' +
 }
 return __p
 };module.exports=templates;
-},{}],112:[function(require,module,exports){
+},{}],119:[function(require,module,exports){
 var templates={};templates['element-accordion']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -8581,7 +8896,7 @@ __p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/200
 }
 return __p
 };module.exports=templates;
-},{}],113:[function(require,module,exports){
+},{}],120:[function(require,module,exports){
 /*
  * HTML5 Sortable jQuery Plugin
  * https://github.com/voidberg/html5sortable
@@ -8722,7 +9037,7 @@ return __p
     });
   };
 })(jQuery);
-},{}],114:[function(require,module,exports){
+},{}],121:[function(require,module,exports){
 // Generated by CoffeeScript 1.9.2
 
 /*
@@ -8952,7 +9267,7 @@ Copyright 2015 Kevin Sylvestre
   };
 
 }).call(this);
-},{}],115:[function(require,module,exports){
+},{}],122:[function(require,module,exports){
 //https://github.com/customd/jquery-visible
 (function($){
 
@@ -9022,7 +9337,7 @@ Copyright 2015 Kevin Sylvestre
     };
 
 })(jQuery);
-},{}],116:[function(require,module,exports){
+},{}],123:[function(require,module,exports){
 //https://github.com/kmewhort/pointer_events_polyfill
 /*
  * Pointer Events Polyfill: Adds support for the style attribute "pointer-events: none" to browsers without this feature (namely, IE).
@@ -9092,7 +9407,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
         return true;
     });
 };
-},{}],117:[function(require,module,exports){
+},{}],124:[function(require,module,exports){
 // Modified to fix transparent pixels being calculated as black (https://github.com/briangonzalez/rgbaster.js/issues/8)
 ;(function(window, undefined){
 
@@ -9216,7 +9531,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
   window.RGBaster = window.RGBaster || RGBaster;
 
 })(window);
-},{}],118:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 //! moment.js
 //! version : 2.10.6
 //! authors : Tim Wood, Iskren Chernev, Moment.js contributors
@@ -12412,7 +12727,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     return _moment;
 
 }));
-},{}],119:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
 /*global define:false */
 /**
  * Copyright 2015 Craig Campbell
@@ -13435,7 +13750,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     }
 }) (window, document);
 
-},{}],120:[function(require,module,exports){
+},{}],127:[function(require,module,exports){
 /**
  * adds a bindGlobal method to Mousetrap that allows you to
  * bind specific keyboard shortcuts that will still work
@@ -13480,7 +13795,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     Mousetrap.init();
 }) (Mousetrap);
 
-},{}],121:[function(require,module,exports){
+},{}],128:[function(require,module,exports){
 /* NProgress, (c) 2013, 2014 Rico Sta. Cruz - http://ricostacruz.com/nprogress
  * @license MIT */
 
@@ -13958,7 +14273,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
 });
 
 
-},{}],122:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -13966,7 +14281,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
 
 module.exports = require('./src/js/adaptor/jquery');
 
-},{"./src/js/adaptor/jquery":123}],123:[function(require,module,exports){
+},{"./src/js/adaptor/jquery":130}],130:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14014,7 +14329,7 @@ if (typeof define === 'function' && define.amd) {
 
 module.exports = mountJQuery;
 
-},{"../main":129,"../plugin/instances":140}],124:[function(require,module,exports){
+},{"../main":136,"../plugin/instances":147}],131:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14061,7 +14376,7 @@ exports.list = function (element) {
   }
 };
 
-},{}],125:[function(require,module,exports){
+},{}],132:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14150,7 +14465,7 @@ DOM.queryChildren = function (element, selector) {
 
 module.exports = DOM;
 
-},{}],126:[function(require,module,exports){
+},{}],133:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14226,7 +14541,7 @@ EventManager.prototype.once = function (element, eventName, handler) {
 
 module.exports = EventManager;
 
-},{}],127:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14244,7 +14559,7 @@ module.exports = (function () {
   };
 })();
 
-},{}],128:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14330,7 +14645,7 @@ exports.env = {
   supportsIePointer: window.navigator.msMaxTouchPoints !== null
 };
 
-},{"./class":124,"./dom":125}],129:[function(require,module,exports){
+},{"./class":131,"./dom":132}],136:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14346,7 +14661,7 @@ module.exports = {
   destroy: destroy
 };
 
-},{"./plugin/destroy":131,"./plugin/initialize":139,"./plugin/update":143}],130:[function(require,module,exports){
+},{"./plugin/destroy":138,"./plugin/initialize":146,"./plugin/update":150}],137:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14368,7 +14683,7 @@ module.exports = {
   wheelSpeed: 1
 };
 
-},{}],131:[function(require,module,exports){
+},{}],138:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14395,7 +14710,7 @@ module.exports = function (element) {
   instances.remove(element);
 };
 
-},{"../lib/dom":125,"../lib/helper":128,"./instances":140}],132:[function(require,module,exports){
+},{"../lib/dom":132,"../lib/helper":135,"./instances":147}],139:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14460,7 +14775,7 @@ module.exports = function (element) {
   bindClickRailHandler(element, i);
 };
 
-},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],133:[function(require,module,exports){
+},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],140:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14568,7 +14883,7 @@ module.exports = function (element) {
   bindMouseScrollYHandler(element, i);
 };
 
-},{"../../lib/dom":125,"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],134:[function(require,module,exports){
+},{"../../lib/dom":132,"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],141:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14695,7 +15010,7 @@ module.exports = function (element) {
   bindKeyboardHandler(element, i);
 };
 
-},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],135:[function(require,module,exports){
+},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],142:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14842,7 +15157,7 @@ module.exports = function (element) {
   bindMouseWheelHandler(element, i);
 };
 
-},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],136:[function(require,module,exports){
+},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],143:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14862,7 +15177,7 @@ module.exports = function (element) {
   bindNativeScrollHandler(element, i);
 };
 
-},{"../instances":140,"../update-geometry":141}],137:[function(require,module,exports){
+},{"../instances":147,"../update-geometry":148}],144:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14976,7 +15291,7 @@ module.exports = function (element) {
   bindSelectionHandler(element, i);
 };
 
-},{"../../lib/helper":128,"../instances":140,"../update-geometry":141,"../update-scroll":142}],138:[function(require,module,exports){
+},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],145:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15149,7 +15464,7 @@ module.exports = function (element, supportsTouch, supportsIePointer) {
   bindTouchHandler(element, i, supportsTouch, supportsIePointer);
 };
 
-},{"../instances":140,"../update-geometry":141,"../update-scroll":142}],139:[function(require,module,exports){
+},{"../instances":147,"../update-geometry":148,"../update-scroll":149}],146:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15198,7 +15513,7 @@ module.exports = function (element, userSettings) {
   updateGeometry(element);
 };
 
-},{"../lib/class":124,"../lib/helper":128,"./handler/click-rail":132,"./handler/drag-scrollbar":133,"./handler/keyboard":134,"./handler/mouse-wheel":135,"./handler/native-scroll":136,"./handler/selection":137,"./handler/touch":138,"./instances":140,"./update-geometry":141}],140:[function(require,module,exports){
+},{"../lib/class":131,"../lib/helper":135,"./handler/click-rail":139,"./handler/drag-scrollbar":140,"./handler/keyboard":141,"./handler/mouse-wheel":142,"./handler/native-scroll":143,"./handler/selection":144,"./handler/touch":145,"./instances":147,"./update-geometry":148}],147:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15307,7 +15622,7 @@ exports.get = function (element) {
   return instances[getId(element)];
 };
 
-},{"../lib/dom":125,"../lib/event-manager":126,"../lib/guid":127,"../lib/helper":128,"./default-setting":130}],141:[function(require,module,exports){
+},{"../lib/dom":132,"../lib/event-manager":133,"../lib/guid":134,"../lib/helper":135,"./default-setting":137}],148:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15430,7 +15745,7 @@ module.exports = function (element) {
   cls[i.scrollbarYActive ? 'add' : 'remove'](element, 'ps-active-y');
 };
 
-},{"../lib/class":124,"../lib/dom":125,"../lib/helper":128,"./instances":140,"./update-scroll":142}],142:[function(require,module,exports){
+},{"../lib/class":131,"../lib/dom":132,"../lib/helper":135,"./instances":147,"./update-scroll":149}],149:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15537,7 +15852,7 @@ module.exports = function (element, axis, value) {
 
 };
 
-},{"./instances":140}],143:[function(require,module,exports){
+},{"./instances":147}],150:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15574,7 +15889,7 @@ module.exports = function (element) {
   d.css(i.scrollbarYRail, 'display', '');
 };
 
-},{"../lib/dom":125,"../lib/helper":128,"./instances":140,"./update-geometry":141}]},{},[4])(4)
+},{"../lib/dom":132,"../lib/helper":135,"./instances":147,"./update-geometry":148}]},{},[4])(4)
 });
 //# sourceMappingURL=builder.map
 

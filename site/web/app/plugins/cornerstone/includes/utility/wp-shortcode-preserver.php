@@ -27,6 +27,7 @@ class WP_Shortcode_Preserver {
 
 	public function __construct() {
 		$this->shortcodes = array();
+		$this->cache = array();
 		add_filter( 'the_content', array( $this, 'preserve_shortcodes' ), 9 );
 		add_filter( 'the_content', array( $this, 'restore_shortcodes' ), 11 );
 	}
@@ -39,7 +40,6 @@ class WP_Shortcode_Preserver {
 	 */
 	public function preserve_shortcodes( $content ) {
 
-		$this->cache = array();
 		$this->shortcodes = apply_filters( 'wp_preserve_shortcodes', $this->shortcodes );
 
 		if ( empty( $this->shortcodes ) )
@@ -68,8 +68,7 @@ class WP_Shortcode_Preserver {
 	 */
 	public function restore_shortcodes( $content ) {
 		foreach ($this->cache as $key => $value) {
-			if ( !isset( $this->cache[$key] ) ) continue;
-			$content = do_shortcode( str_replace( $key, $value, $content ), true ) ;
+			$content = do_shortcode( str_replace( $key, $value, $content ), true );
 		}
 		return $content;
 	}

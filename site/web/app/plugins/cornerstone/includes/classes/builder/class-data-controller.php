@@ -46,7 +46,7 @@ class Cornerstone_Data_Controller  extends Cornerstone_Plugin_Component {
 	public function migrate( $elements, $version = 0 ) {
 
 		// Skip migrations if we are working with up to date elements.
-		if ( !version_compare( $this->plugin->version(), $version,'>' ) )
+		if ( version_compare( $this->plugin->version(), $version,'<' ) )
 			return $elements;
 
 		foreach ($elements as $key => $element) {
@@ -75,7 +75,7 @@ class Cornerstone_Data_Controller  extends Cornerstone_Plugin_Component {
 	public function common_migrations( $element, $version ) {
 
 		// MK2 Upgrade
-		if ( version_compare( $version, '1.0.7', '<' ) ) {
+		if ( version_compare( $version, '1.0.10', '<' ) ) {
 
 			// Ensure '_type' is set
 			if ( isset( $element['elType'] ) ) {

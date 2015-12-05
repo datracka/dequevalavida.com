@@ -32,6 +32,7 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 
 		// Admin Ajax Only
 		add_action( 'wp_ajax_cs_override', array( $this, 'override' ) );
+		add_action( 'wp_ajax_cs_legacy_ajax', array( $this, 'enable_legacy_ajax' ) );
 
 	}
 
@@ -88,14 +89,30 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 		$this->plugin->loadComponent( 'Layout_Manager' )->ajax_delete( $this->getJSON() );
 	}
 
+	public function enable_legacy_ajax() {
+		update_option( 'cs_legacy_ajax', true );
+		wp_send_json_success( true );
+	}
+
 	public function getJSON() {
+
 		$data = array();
 
 		if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-  		$data = json_decode( file_get_contents("php://input"), true );
+			if ( isset( $_POST['data'] ) ) {
+				$data = json_decode( base64_decode( $_POST['data'] ), true );
+			} else {
+				$data = json_decode( file_get_contents("php://input"), true );
+			}
 		}
 
 		return $data;
+	}
+
+	public function use_legacy_ajax() {
+		if ( defined( 'CS_LEGACY_AJAX' ) )
+			return CS_LEGACY_AJAX;
+		return get_option( 'cs_legacy_ajax', false );
 	}
 
 	public function get_ajax_url() {
@@ -115,6 +132,9 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 	}
 
 	public function maybe_do_rewrite_rules() {
+
+		if ( $this->use_legacy_ajax() )
+			return false;
 
 		$structure = get_option('permalink_structure');
 

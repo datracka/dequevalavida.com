@@ -60,6 +60,7 @@ class Cornerstone_Builder_Renderer extends Cornerstone_Plugin_Component {
 				return new WP_Error( 'cs_renderer', 'Malformed render job request');
 
 			$markup =  $this->render_element( $job['data'], ( $job['provider'] != 'mk2' ) );
+
 			$scripts = $this->enqueue_extractor->extract();
 
 			$results[$job['jobID']] = array( 'markup' => $markup );
@@ -89,10 +90,12 @@ class Cornerstone_Builder_Renderer extends Cornerstone_Plugin_Component {
 			$markup = $definition->preview( $element );
 		}
 
-		if ( $this->raw_markup )
-			return $markup;
+		$markup = ( $this->raw_markup ) ? $markup : apply_filters( 'the_content', $markup );
 
-		return apply_filters( 'the_content', $markup );
+		if ( !is_string( $markup ) )
+			$markup = '';
+
+		return $markup;
 
 	}
 

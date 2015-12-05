@@ -332,8 +332,9 @@ class Cornerstone_Element_Wrapper {
 	  $output = "[{$this->shortcode_name}";
 
 	  foreach ($atts as $attribute => $value) {
-		$clean = cs_clean_shortcode_att( $value );
-	    $output .= " {$attribute}=\"{$clean}\"";
+			$clean = cs_clean_shortcode_att( $value );
+			$att = sanitize_key( $attribute );
+	    $output .= " {$att}=\"{$clean}\"";
 	  }
 
 	  if ( $content == '' && !apply_filters( $this->hook_prefix . 'always_close_shortcode', false ) ) {
@@ -370,6 +371,10 @@ class Cornerstone_Element_Wrapper {
 				continue;
 			}
 
+		}
+
+		if ( isset( $atts['class'] ) ) {
+			$atts['class'] = cs_sanitize_html_classes( $atts['class'] );
 		}
 
 		return $atts;

@@ -169,9 +169,14 @@ function cs_build_shortcode( $name, $attributes, $extra = '', $content = '' ) {
 
   $output = "[{$name}";
 
+  if ( isset( $attributes['class'] ) ) {
+		$attributes['class'] = cs_sanitize_html_classes( $attributes['class'] );
+	}
+
   foreach ($attributes as $attribute => $value) {
-	$clean = cs_clean_shortcode_att( $value );
-    $output .= " {$attribute}=\"{$clean}\"";
+		$clean = cs_clean_shortcode_att( $value );
+		$att = sanitize_key( $attribute );
+    $output .= " {$att}=\"{$clean}\"";
   }
 
   if ($extra != '') {
@@ -316,16 +321,26 @@ function cs_memoize( $key, $callback, $expiration = 0 ) {
  */
 function cs_clean_shortcode_att( $value ) {
 
-	$value = esc_attr( $value );
-
-	$whitelist = array(
-  	'&lt;br&gt;' => '<br>',
-  	'&lt;br/&gt;' => '<br/>',
-  	'&lt;br /&gt;' => '<br />',
-  );
-
-  $value = strtr( $value, $whitelist );
+	$value = wp_kses( $value, wp_kses_allowed_html( 'post' ) );
+	$value = esc_html( $value );
 	$value = str_replace( ']', '&rsqb;', str_replace('[', '&lsqb;', $value ) );
 
 	return $value;
+}
+
+/**
+ * Sanitizes an HTML classname to ensure it only contains valid characters.
+ *
+ * Uses sanitize_html_class but allows spaces for multiple classes.
+ *
+ * @param string $class    The classname to be sanitized
+ * @return string The sanitized value
+ */
+function cs_sanitize_html_classes( $class ) {
+
+	$classes = explode(' ', $class );
+  array_map( 'sanitize_html_class', $classes );
+  $class = implode(' ', $classes );
+
+	return $class;
 }

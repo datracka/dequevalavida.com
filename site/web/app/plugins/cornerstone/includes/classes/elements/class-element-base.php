@@ -233,12 +233,24 @@ abstract class Cornerstone_Element_Base {
 
 		foreach ($this->data['controls'] as $item ) {
 			$name = $item['name'];
+
+			$condition = null;
+
+			if ( isset($item['options']['condition'] ) ) {
+				$condition = $item['options']['condition'];
+				unset($item['options']['condition']);
+			}
+
 			$config = array(
 				'type' => $item['controlType'],
 				'ui' => array(),
 				'options' => $item['options'],
 				'suggest' => $item['defaultValue']
 			);
+
+			if ( !is_null( $condition ) ) {
+				$config['condition'] = $condition;
+			}
 
 			if ( !is_null( $item['controlTitle'] ) )
 				$config['ui']['title'] = $item['controlTitle'];
@@ -293,8 +305,10 @@ abstract class Cornerstone_Element_Base {
 		if ( isset($atts['id']) && $atts['id'] != '' )
 			$extra .= " id=\"{$atts['id']}\"";
 
-		if ( isset($atts['class']) && $atts['class'] != '' )
-			$extra .= " class=\"{$atts['class']}\"";
+		if ( isset($atts['class']) && $atts['class'] != '' ) {
+			$class = cs_sanitize_html_classes( $atts['class'] );
+			$extra .= " class=\"{$class}\"";
+		}
 
 		if ( isset($atts['style']) && $atts['style'] != '' )
 			$extra .= " style=\"{$atts['style']}\"";

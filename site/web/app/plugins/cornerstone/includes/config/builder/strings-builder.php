@@ -191,6 +191,7 @@ return array(
 	// Errors
 	'browser-no-can' => __( "We're sorry! Your web browser does not support this action.", $td ),
 	'no-preview' => __( "%s (Preview Unsupported)", $td ),
-	'preview-failure' => __( "An unidentifiable error is preventing the live preview from loading.", $td )
+	'preview-failure' => __( "An unidentifiable error is preventing the live preview from loading.", $td ),
+	'preview-late'    => __( "Loading the preview took longer than expected. There may be script conflicts on this page.", $td )
 
 );

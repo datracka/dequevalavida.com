@@ -244,7 +244,6 @@ module.exports = Cornerstone.Component.extend({
 
     options.model.destroy({
       success: function() {
-        cs.events.trigger( 'inspect:clear' );
         if (options.success)
           _.defer( options.success );
       }
@@ -347,7 +346,7 @@ require('./app-mk2')( csCoreData, {
 	common: [ 'element-library', 'element-handler' ]
 });
 },{"./app-mk2":1,"./modules/bootstrap":22}],13:[function(require,module,exports){
-module.exports =  Backbone.Model.extend({
+var ControlProxy = Backbone.Model.extend({
 
 	initialize: function( attributes, options ) {
 
@@ -363,11 +362,15 @@ module.exports =  Backbone.Model.extend({
 
 		this.listenTo( this.source, 'children:updated', function() {
 			this.trigger( 'children:updated' );
-		})
+		});
 
 		this.listenTo( this.source, 'position:updated', function() {
 			this.trigger( 'position:updated' );
-		})
+		});
+
+		this.listenTo( this.source, 'remove destroy', function() {
+			this.destroy();
+		});
 
 	},
 
@@ -391,8 +394,12 @@ module.exports =  Backbone.Model.extend({
 		this.set( _.clone(this.source.attributes), { silent: true });
 	}
 
-
 });
+
+ControlProxy.prototype.sync = function() { return null; };
+ControlProxy.prototype.fetch = function() { return null; };
+ControlProxy.prototype.save = function() { return null; };
+module.exports = ControlProxy;
 },{}],14:[function(require,module,exports){
 module.exports =  Backbone.Model.extend({
 
@@ -502,6 +509,11 @@ module.exports = Proxyable.extend({
 		});
 
 		this.on( 'update:child:data', this.updateChildData );
+
+		this.on( 'destroy', function() {
+			this.elements.invoke( 'destroy' );
+		} );
+
 	},
 
 	getDefaults: function() {
@@ -693,11 +705,19 @@ module.exports = Backbone.Model.extend({
 module.exports = function( action, data, opts ) {
 
 	var urlBase = ( cs.fallbackAjax ) ? 'fallbackAjaxUrl' : 'ajaxUrl';
+	var json = JSON.stringify( data || {} );
+	var postData;
+	if (cs.config('useLegacyAjax')) {
+		postData = { data: Cornerstone.Vendor.Base64.encode( json ) }
+	} else {
+		postData = json;
+	}
+
 	var options = _.defaults( opts || {}, {
 		type:    'POST',
 		url:     cs.config(urlBase) + '?action=' + action,
 		context: this,
-		data: JSON.stringify( data || {} ),
+		data: postData,
 		dataType: 'json'
 	});
 
@@ -714,17 +734,42 @@ module.exports = function( action, data, opts ) {
 		delete options.success;
 		delete options.error;
 
+		var errorRecovery = function() {
+
+			if ( 'fallbackAjaxUrl' == urlBase ) {
+
+				if ( cs.fallbackAjax ) {
+					// Switch to legacy AJAX and start over...
+					Backbone.$.ajax( {
+						type:    'POST',
+						url:     cs.config('fallbackAjaxUrl') + '?action=cs_legacy_ajax',
+						data: { enable: true },
+						complete: function() {
+							cs.fallbackAjax = false;
+							window.location = window.location;
+						}
+					} );
+				} else {
+					console.log( 'Unhandled AJAX error.' );
+				}
+
+			} else {
+				cs.global.trigger( 'ajax:fallback', true );
+				cs.fallbackAjax = true;
+			}
+		}
+
 		// Use with PHP's wp_send_json_success() and wp_send_json_error()
 		Backbone.$.ajax( options ).done( function( response ) {
-			if ( 'true' != arguments[2].getResponseHeader('Cornerstone') ) {
-				cs.global.trigger( 'ajax:fallback', true );
+			if ( ( 'true' != arguments[2].getResponseHeader('Cornerstone') && 'ajaxUrl' == urlBase ) || !response || !response.success ) {
+				errorRecovery();
 			}
 			if ( _.isObject( response ) && ! _.isUndefined( response.success ) )
 				deferred[ response.success ? 'resolveWith' : 'rejectWith' ]( this, [response.data, options]	);
 			else
 				deferred.rejectWith( this, [response ] );
 		}).fail( function( response ) {
-			cs.global.trigger( 'ajax:fallback', true );
+			errorRecovery();
 			deferred.rejectWith( this, arguments );
 		});
 	}).promise();
@@ -744,8 +789,10 @@ _.mixin( { deepExtend: require('underscore-deep-extend')(_) } );
 Cornerstone.Vendor = {
 	Marionette: require('backbone.marionette'),
 	FileSaver: require('../../vendor/FileSaver'),
-	Color: require('../../vendor/color')
+	Color: require('../../vendor/color'),
+	Base64: require('../../vendor/base64')
 }
+
 Cornerstone.Mn = Cornerstone.Vendor.Marionette;
 
 Cornerstone.Component = require('./component-base')
@@ -757,7 +804,7 @@ Cornerstone.Post = require('./post');
 Cornerstone.serial = require('./serial');
 
 module.exports = Cornerstone;
-},{"../../vendor/FileSaver":28,"../../vendor/color":30,"../../vendor/string_score":32,"../collections":5,"../models":17,"./../../vendor/underscore-shim.js":33,"./component-base":23,"./inspection-supervisor":25,"./post":26,"./serial":27,"backbone.marionette":35,"backbone.radio":36,"backbone.stickit":37,"underscore-deep-extend":39}],23:[function(require,module,exports){
+},{"../../vendor/FileSaver":28,"../../vendor/base64":30,"../../vendor/color":31,"../../vendor/string_score":33,"../collections":5,"../models":17,"./../../vendor/underscore-shim.js":34,"./component-base":23,"./inspection-supervisor":25,"./post":26,"./serial":27,"backbone.marionette":36,"backbone.radio":37,"backbone.stickit":38,"underscore-deep-extend":40}],23:[function(require,module,exports){
 module.exports = Cornerstone.Mn.Object.extend({
 	constructor: function(options) {
 		this.options = options || {};
@@ -978,7 +1025,7 @@ module.exports = function(tasks) {
 
   return promise;
 }
-},{"./../../vendor/jquery-shim.js":31}],28:[function(require,module,exports){
+},{"./../../vendor/jquery-shim.js":32}],28:[function(require,module,exports){
 /* FileSaver.js
  * A saveAs() FileSaver implementation.
  * 1.1.20150716
@@ -1245,6 +1292,225 @@ if (!window.CornerstoneShims.Backbone){
 module.exports = window.CornerstoneShims.Backbone;
 
 },{}],30:[function(require,module,exports){
+/*
+Copyright (c) 2008 Fred Palmer fred.palmer_at_gmail.com
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+*/
+function StringBuffer()
+{
+    this.buffer = [];
+}
+
+StringBuffer.prototype.append = function append(string)
+{
+    this.buffer.push(string);
+    return this;
+};
+
+StringBuffer.prototype.toString = function toString()
+{
+    return this.buffer.join("");
+};
+
+var Base64 =
+{
+    codex : "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=",
+
+    encode : function (input)
+    {
+        var output = new StringBuffer();
+
+        var enumerator = new Utf8EncodeEnumerator(input);
+        while (enumerator.moveNext())
+        {
+            var chr1 = enumerator.current;
+
+            enumerator.moveNext();
+            var chr2 = enumerator.current;
+
+            enumerator.moveNext();
+            var chr3 = enumerator.current;
+
+            var enc1 = chr1 >> 2;
+            var enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+            var enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+            var enc4 = chr3 & 63;
+
+            if (isNaN(chr2))
+            {
+                enc3 = enc4 = 64;
+            }
+            else if (isNaN(chr3))
+            {
+                enc4 = 64;
+            }
+
+            output.append(this.codex.charAt(enc1) + this.codex.charAt(enc2) + this.codex.charAt(enc3) + this.codex.charAt(enc4));
+        }
+
+        return output.toString();
+    },
+
+    decode : function (input)
+    {
+        var output = new StringBuffer();
+
+        var enumerator = new Base64DecodeEnumerator(input);
+        while (enumerator.moveNext())
+        {
+            var charCode = enumerator.current;
+
+            if (charCode < 128)
+                output.append(String.fromCharCode(charCode));
+            else if ((charCode > 191) && (charCode < 224))
+            {
+                enumerator.moveNext();
+                var charCode2 = enumerator.current;
+
+                output.append(String.fromCharCode(((charCode & 31) << 6) | (charCode2 & 63)));
+            }
+            else
+            {
+                enumerator.moveNext();
+                var charCode2 = enumerator.current;
+
+                enumerator.moveNext();
+                var charCode3 = enumerator.current;
+
+                output.append(String.fromCharCode(((charCode & 15) << 12) | ((charCode2 & 63) << 6) | (charCode3 & 63)));
+            }
+        }
+
+        return output.toString();
+    }
+}
+
+
+function Utf8EncodeEnumerator(input)
+{
+    this._input = input;
+    this._index = -1;
+    this._buffer = [];
+}
+
+Utf8EncodeEnumerator.prototype =
+{
+    current: Number.NaN,
+
+    moveNext: function()
+    {
+        if (this._buffer.length > 0)
+        {
+            this.current = this._buffer.shift();
+            return true;
+        }
+        else if (this._index >= (this._input.length - 1))
+        {
+            this.current = Number.NaN;
+            return false;
+        }
+        else
+        {
+            var charCode = this._input.charCodeAt(++this._index);
+
+            // "\r\n" -> "\n"
+            //
+            if ((charCode == 13) && (this._input.charCodeAt(this._index + 1) == 10))
+            {
+                charCode = 10;
+                this._index += 2;
+            }
+
+            if (charCode < 128)
+            {
+                this.current = charCode;
+            }
+            else if ((charCode > 127) && (charCode < 2048))
+            {
+                this.current = (charCode >> 6) | 192;
+                this._buffer.push((charCode & 63) | 128);
+            }
+            else
+            {
+                this.current = (charCode >> 12) | 224;
+                this._buffer.push(((charCode >> 6) & 63) | 128);
+                this._buffer.push((charCode & 63) | 128);
+            }
+
+            return true;
+        }
+    }
+}
+
+function Base64DecodeEnumerator(input)
+{
+    this._input = input;
+    this._index = -1;
+    this._buffer = [];
+}
+
+Base64DecodeEnumerator.prototype =
+{
+    current: 64,
+
+    moveNext: function()
+    {
+        if (this._buffer.length > 0)
+        {
+            this.current = this._buffer.shift();
+            return true;
+        }
+        else if (this._index >= (this._input.length - 1))
+        {
+            this.current = 64;
+            return false;
+        }
+        else
+        {
+            var enc1 = Base64.codex.indexOf(this._input.charAt(++this._index));
+            var enc2 = Base64.codex.indexOf(this._input.charAt(++this._index));
+            var enc3 = Base64.codex.indexOf(this._input.charAt(++this._index));
+            var enc4 = Base64.codex.indexOf(this._input.charAt(++this._index));
+
+            var chr1 = (enc1 << 2) | (enc2 >> 4);
+            var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+            var chr3 = ((enc3 & 3) << 6) | enc4;
+
+            this.current = chr1;
+
+            if (enc3 != 64)
+                this._buffer.push(chr2);
+
+            if (enc4 != 64)
+                this._buffer.push(chr3);
+
+            return true;
+        }
+    }
+};
+
+module.exports = Base64;
+},{}],31:[function(require,module,exports){
 /*! Color.js - v0.9.11 - 2013-08-09
 * https://github.com/Automattic/Color.js
 * Copyright (c) 2013 Matt Wiebe; Licensed GPLv2 */
@@ -1837,7 +2103,7 @@ module.exports = window.CornerstoneShims.Backbone;
 		global.Color = Color;
 
 }(this));
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 window.CornerstoneShims = window.CornerstoneShims || {};
 
 if (!window.CornerstoneShims.$){
@@ -1846,7 +2112,7 @@ if (!window.CornerstoneShims.$){
 
 module.exports = window.CornerstoneShims.$;
 
-},{}],32:[function(require,module,exports){
+},{}],33:[function(require,module,exports){
 /*!
  * string_score.js: String Scoring Algorithm 0.1.22
  *
@@ -1951,7 +2217,7 @@ String.prototype.score = function (word, fuzziness) {
 
   return finalScore;
 };
-},{}],33:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 window.CornerstoneShims = window.CornerstoneShims || {};
 
 if (!window.CornerstoneShims._){
@@ -1960,7 +2226,7 @@ if (!window.CornerstoneShims._){
 
 module.exports = window.CornerstoneShims._;
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 // Backbone.BabySitter
 // -------------------
 // v0.1.10
@@ -2152,7 +2418,7 @@ module.exports = window.CornerstoneShims._;
 
 }));
 
-},{"./../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../assets/js/src/admin/vendor/underscore-shim.js":33}],35:[function(require,module,exports){
+},{"./../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../assets/js/src/admin/vendor/underscore-shim.js":34}],36:[function(require,module,exports){
 // MarionetteJS (Backbone.Marionette)
 // ----------------------------------
 // v2.4.3
@@ -5647,7 +5913,7 @@ module.exports = window.CornerstoneShims._;
   return Marionette;
 }));
 
-},{"./../../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../../assets/js/src/admin/vendor/underscore-shim.js":33,"backbone.babysitter":34,"backbone.wreqr":38}],36:[function(require,module,exports){
+},{"./../../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../../assets/js/src/admin/vendor/underscore-shim.js":34,"backbone.babysitter":35,"backbone.wreqr":39}],37:[function(require,module,exports){
 // Backbone.Radio v1.0.2
 (function (global, factory) {
   typeof exports === "object" && typeof module !== "undefined" ? module.exports = factory(require('./../../../assets/js/src/admin/vendor/underscore-shim.js'), require('./../../../assets/js/src/admin/vendor/backbone-shim.js')) : typeof define === "function" && define.amd ? define(["underscore", "backbone"], factory) : global.Backbone.Radio = factory(global._, global.Backbone);
@@ -5984,7 +6250,7 @@ module.exports = window.CornerstoneShims._;
   return backbone_radio;
 });
 
-},{"./../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../assets/js/src/admin/vendor/underscore-shim.js":33}],37:[function(require,module,exports){
+},{"./../../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../../assets/js/src/admin/vendor/underscore-shim.js":34}],38:[function(require,module,exports){
 // Backbone.Stickit v0.9.2, MIT Licensed
 // Copyright (c) 2012-2015 The New York Times, CMS Group, Matthew DeLambo <delambo@gmail.com>
 
@@ -6678,9 +6944,9 @@ module.exports = window.CornerstoneShims._;
 
 }));
 
-},{"./../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../assets/js/src/admin/vendor/underscore-shim.js":33}],38:[function(require,module,exports){
+},{"./../../assets/js/src/admin/vendor/backbone-shim.js":29,"./../../assets/js/src/admin/vendor/underscore-shim.js":34}],39:[function(require,module,exports){
 
-},{}],39:[function(require,module,exports){
+},{}],40:[function(require,module,exports){
 /* implementation: Copyright (C) 2012-2013 Kurt Milam - http://xioup.com | Source: https://gist.github.com/1868955
 *  NPM packaging: Copyright (C) 2012-2014 Pierre-Yves Gérardy | https://github.com/pygy/underscoreDeepExtend
 *

@@ -51,6 +51,10 @@ class CSE_Section {
 				unset( $atts['bg_video_poster'] );
 			}
 
+			if ( $atts['bg_type'] == 'none' ) {
+				unset( $atts['bg_color'] );
+			}
+
 			unset( $atts['bg_pattern_toggle'] );
 			unset( $atts['bg_type'] );
 
