@@ -32,6 +32,6 @@ $stack = x_get_stack();
 
     </div>
 
-<?php get_sidebar('blog'); ?>
+<?php get_sidebar('libros'); ?>
 
 <?php get_footer(); ?>
