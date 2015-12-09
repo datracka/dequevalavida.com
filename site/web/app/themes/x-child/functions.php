@@ -24,8 +24,13 @@ add_filter( 'x_enqueue_parent_stylesheet', '__return_true' );
 // =============================================================================
 
 /* https://community.theme.co/kb/translation/ */
-add_action( 'after_setup_theme', 'load_child_language' );
-function load_child_language() {
-    load_child_theme_textdomain( '__x__', get_stylesheet_directory() . '/languages' );
+//add_action( 'after_setup_theme', 'load_child_language' );
+
+
+function x_content_string($more) {
+
+    return '<a href="' . get_permalink() . '" class="more-link">' . __( 'Leer más', '__x__' ) . '</a>';
+
 }
+add_filter( 'the_content_more_link', 'x_content_string' );
 
