@@ -9,7 +9,7 @@ class Cornerstone_Builder extends Cornerstone_Plugin_Component {
 	private $templateLoader;
 	private $router;
 	public $mixins;
-	public $dependencies = array( 'Router', 'Control_Mixins', 'Builder_Renderer', 'Data_Controller' );
+	public $dependencies = array( 'Router', 'Control_Mixins', 'Data_Controller' );
 
 	/**
 	 * Determine whether we are working in the iframe, or primary screen.

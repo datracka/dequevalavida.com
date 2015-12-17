@@ -101,7 +101,7 @@ class Cornerstone_Element_Wrapper {
 		add_filter( "shortcode_atts_{$this->shortcode_name}", array( $this, 'shortcode_output_atts' ), 10, 3 );
 
 		if ( $this->preserve_content )
-			add_filter( 'wp_preserve_shortcodes', array( $this, 'preserve_content' ) );
+			add_filter( 'cs_preserve_shortcodes', array( $this, 'preserve_content' ) );
 
 	}
 

@@ -91,6 +91,7 @@ require('../vendor/pointer-events-polyfill');
 require('../vendor/rgbaster');
 require('../vendor/jquery.growl');
 require('../vendor/jquery.visible');
+Cornerstone.Vendor.HTMLHint = require('../vendor/htmlhint').HTMLHint;
 require('./utility/jquery.shadow-height');
 require('./utility/string-replace-all');
 
@@ -127,7 +128,7 @@ cs.updateRegistry( {
 } );
 
 // //cs.loadComponents( (cs.config( 'isPreview' )) ? 'preview' : 'editor' );
-},{"../vendor/html.sortable":120,"../vendor/jquery.growl":121,"../vendor/jquery.visible":122,"../vendor/pointer-events-polyfill":123,"../vendor/rgbaster":124,"./components":23,"./utility/jquery.shadow-height":26,"./utility/string-replace-all":29,"moment":125,"mousetrap":126,"mousetrap/plugins/global-bind/mousetrap-global-bind":127,"nprogress":128,"perfect-scrollbar/jquery":129}],5:[function(require,module,exports){
+},{"../vendor/html.sortable":120,"../vendor/htmlhint":121,"../vendor/jquery.growl":122,"../vendor/jquery.visible":123,"../vendor/pointer-events-polyfill":124,"../vendor/rgbaster":125,"./components":23,"./utility/jquery.shadow-height":26,"./utility/string-replace-all":29,"moment":127,"mousetrap":128,"mousetrap/plugins/global-bind/mousetrap-global-bind":129,"nprogress":130,"perfect-scrollbar/jquery":131}],5:[function(require,module,exports){
 module.exports = Cornerstone.Component.extend({
 
 	initialize: function() {
@@ -241,6 +242,7 @@ module.exports = Cornerstone.Component.extend({
 		cs.render = this;
 		this.cache = {};
 		this.jobs = {};
+		this.timing = {};
 
 		var delay = parseInt( cs.config( 'remoteRenderDelay' ), 10 );
 		this.run = _.debounce( _.bind( this.run, this ), delay );
@@ -285,7 +287,9 @@ module.exports = Cornerstone.Component.extend({
 	},
 
 	queue: function( id, provider, data, callback ) {
-		this.jobs[ id ] = { data: data, provider: provider, callback: callback };
+		var timestamp = Date.now();
+		this.timing[id] = timestamp;
+		this.jobs[ id ] = { data: data, provider: provider, ts: timestamp, callback: callback };
 		this.run();
 	},
 
@@ -294,7 +298,7 @@ module.exports = Cornerstone.Component.extend({
 		if (!data) {
 
 			var batch = _.map( this.jobs, function( value, key ) {
-				return { jobID: key, provider: value.provider, data: value.data || {} };
+				return { jobID: key, ts: value.ts, provider: value.provider, data: value.data || {} };
 			});
 
 			data = {
@@ -320,6 +324,10 @@ module.exports = Cornerstone.Component.extend({
 					}
 				}, this ).concat( _.map( response.jobs, function( job, jobID) {
 					return _.bind( function( next ) {
+
+						if ( job.ts < this.timing[jobID] ) {
+							next(); return;
+						}
 
 						if ( job.markup.indexOf('%%TMPL%%') == 0 ) {
 							job.markup = job.markup.replace('%%TMPL%%','');
@@ -1097,7 +1105,7 @@ module.exports = Cornerstone.Component.extend({
       	cs.data.trigger( 'save:error', response );
       },
       always: function( response ) {
-      	cs.log(response);
+      	cs.log( 'save', response);
       	cs.data.trigger( 'save:response', response );
       	Cornerstone.Vendor.NProgress.done();
       }
@@ -1312,12 +1320,24 @@ module.exports = Cornerstone.Component.extend({
     }
 
 
-    _.each( sections, function(section){
-      elements.create( section );
-    }, this );
+    cs.ajax( 'cs_template_migration', { elements: sections } , {
+      success: _.bind( function( response ) {
 
+        _.each( response.elements, function( section ) {
+		      elements.create( section );
+		    }, this );
 
-    cs.message.trigger( 'success', (format == 'page') ? cs.l18n( 'templates-page-updated') : cs.l18n( 'templates-block-inserted') );
+        cs.message.trigger( 'success', (format == 'page') ? cs.l18n( 'templates-page-updated') : cs.l18n( 'templates-block-inserted') );
+
+      }, this ),
+      error: function( response ) {
+        cs.message.trigger( 'error', cs.l18n( 'templates-error-import') );
+      },
+      always: function( response ) {
+      	cs.log( 'template_migration', response);
+      }
+    } );
+
   },
 
 
@@ -1335,6 +1355,8 @@ module.exports = Cornerstone.Component.extend({
       return newSection;
 
     } );
+
+
   },
 
 	save: function( type, title ) {
@@ -1354,7 +1376,7 @@ module.exports = Cornerstone.Component.extend({
         cs.message.trigger( 'error', cs.l18n( 'templates-error-save' ), 10000 );
       },
       always: function( response ) {
-      	cs.log(response);
+      	cs.log( 'save_template', response );
       }
     } );
   },
@@ -1381,7 +1403,7 @@ module.exports = Cornerstone.Component.extend({
         cs.message.trigger( 'error', cs.l18n( 'templates-error-delete' ), 10000 );
       },
       always: function( response ) {
-      	cs.log(response);
+      	cs.log( 'delete_template', response );
       }
     } );
   },
@@ -2906,7 +2928,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 
         if ( !selection || selection == '' ) return;
 
-        this.$prevIcon = this.$('.cs-icons-inner li[data-choices~=' + selection + ']')
+        this.$prevIcon = this.$('.cs-icons-inner li[data-choice=' + selection + ']')
         this.$prevIcon.addClass('active');
 
         var pos = this.$prevIcon.position();
@@ -2944,6 +2966,11 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
       this.$('ul.cs-choose').append( cs.template('controls/icon-choose-item')({ code: code, choice: words[0], choices: words.join(' ') }) );
     }, this );
 
+    this.$('.cs-icons-inner').perfectScrollbar({
+      scrollYMarginOffset: 10,
+      wheelPropagation: true
+    });
+
     // Outputting the icons takes a moment, so let's do that pseudo-asynch
     _.defer( _.bind( this.deferRender, this ) );
 
@@ -2957,12 +2984,7 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
       this.$('ul.cs-choose').append( cs.template('controls/icon-choose-item')({ code: code, choice: words[0], choices: words.join(' ') }) );
     }, this );
 
-    this.$('.cs-icons-inner').perfectScrollbar({
-      scrollYMarginOffset: 10,
-      wheelPropagation: true
-    });
-
-    //this.$('.cs-icons-inner').perfectScrollbar('update');
+    this.$('.cs-icons-inner').perfectScrollbar('update');
     this.trigger('deferred:render');
   }
 
@@ -4147,17 +4169,32 @@ module.exports =  Cornerstone.ControlViews.Base.extend({
 module.exports =  Cornerstone.ControlViews.Base.extend({
 	controlName: 'textarea',
 	bindingSelector: 'textarea',
+	htmlhint: { 'tagname-lowercase': false, 'attr-lowercase': false, 'attr-value-double-quotes': false, 'doctype-first': false, 'tag-pair': true, 'spec-char-escape': true, 'id-unique': false, 'src-not-empty': false, 'attr-no-duplication': false, 'title-require': false },
   onProxyReady: function() {
     var opts = this.model.get('options');
     if (!opts.expandable && opts.expandable !== false) {
       opts.expandable = opts.controlTitle || true;
       this.model.set('options', opts);
     }
+
   },
   onRender: function() {
     var options = this.model.get('options');
     if ( options.placeholder )
       this.$('textarea').attr('placeholder', options.placeholder );
+
+    if ( options.htmlhint ) {
+    	var $textarea = this.$('textarea');
+    	$textarea.on( 'blur', _.bind( function(){
+
+    		var errors = _.map( Cornerstone.Vendor.HTMLHint.verify( $textarea.val(), this.htmlhint ), function( item ) {
+    			return item.rule.id;
+    		});
+    		if ( !_.isEmpty( errors ) ) {
+    			cs.message.trigger( 'error', CS.Mn.Renderer.render( 'utility/htmlhint', { errors: errors } ), 7000 );
+    		}
+    	}, this ) );
+    }
   }
 });
 },{}],68:[function(require,module,exports){
@@ -5855,6 +5892,7 @@ module.exports = CS.Mn.CompositeView.extend( {
 	childViewContainer: '@ui.root',
 	className: 'cs-preview-element-wrapper',
 	draggable: true,
+	htmlhint: { 'tagname-lowercase': false, 'attr-lowercase': false, 'attr-value-double-quotes': false, 'doctype-first': false, 'tag-pair': true, 'spec-char-escape': false, 'id-unique': false, 'src-not-empty': false, 'attr-no-duplication': false, 'title-require': false },
 
 	attributes: function() {
 		return { 'draggable': _.result( this, 'draggable' ) };
@@ -5994,7 +6032,23 @@ module.exports = CS.Mn.CompositeView.extend( {
 
     }
 
-    if ( html ) this.$el.html(html);
+    if ( html ) {
+
+    	if ( this.model.definition.get('flags').htmlhint ) {
+  			if ( !_.isEmpty( Cornerstone.Vendor.HTMLHint.verify( html, this.htmlhint ) ) )
+    			html = Backbone.$('<div>').text(html).html(); // encode html with unclosed tags.
+  		}
+
+			// errors = _.filter( errors, function( error ) {
+			// 	if ( error.message.indexOf('[ <p> ]') !== -1 ) return false;
+			// 	if ( error.message.indexOf('[ </p> ]') !== -1 ) return false;
+			// 	if ( error.raw =="</p>" ) return false;
+			// 		return true;
+			// });
+
+    	this.$el.html(html);
+
+    }
 
     return this;
   },
@@ -6039,7 +6093,8 @@ module.exports = CS.Mn.CompositeView.extend( {
   },
 
   _renderEmpty: function() {
-  	this.$el.html( CS.Mn.Renderer.render( 'empty-element', this.serializeData() ) );
+  	var $html = Backbone.$( CS.Mn.Renderer.render( 'empty-element', this.serializeData() ) );
+  	this.$el.append( $html );
   },
 
   _emptyDetection: function() {
@@ -7311,6 +7366,8 @@ var __t, __p = '';
 with (obj) {
 __p += '<li title="' +
 ((__t = ( choice )) == null ? '' : __t) +
+'" data-choice="' +
+((__t = ( choice )) == null ? '' : __t) +
 '" data-choices="' +
 ((__t = ( choices )) == null ? '' : __t) +
 '"><i class="cs-icon" data-cs-icon="&#x' +
@@ -7699,6 +7756,18 @@ __p += '\n<p class="message">' +
 
 }
 return __p
+};templates['layout/actions']=function (obj) {
+obj || (obj = {});
+var __t, __p = '';
+with (obj) {
+__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
+((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
+'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
+((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
+'</span>\n  </li>\n</ul>';
+
+}
+return __p
 };templates['inspector/blank-state']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -7785,18 +7854,6 @@ __p += '<ul class="cs-actions">\n  <li class="action manage-layout">\n    <i cla
 ((__t = ( fontIcon('trash-o') )) == null ? '' : __t) +
 '"></i>\n    <span>' +
 ((__t = ( l18n('inspector-delete') )) == null ? '' : __t) +
-'</span>\n  </li>\n</ul>';
-
-}
-return __p
-};templates['layout/actions']=function (obj) {
-obj || (obj = {});
-var __t, __p = '';
-with (obj) {
-__p += '<ul class="cs-actions">\n  <li class="action new">\n    <i class="cs-icon" data-cs-icon="&#xf0fe;"></i>\n    <span>' +
-((__t = ( l18n('layout-add-section') )) == null ? '' : __t) +
-'</span>\n  </li>\n  <li class="action templates">\n    <i class="cs-icon" data-cs-icon="&#xf15b;"></i>\n    <span>' +
-((__t = ( l18n('layout-templates') )) == null ? '' : __t) +
 '</span>\n  </li>\n</ul>';
 
 }
@@ -7965,6 +8022,23 @@ __p += '<h3 class="cs-pane-section-toggle">' +
 
 }
 return __p
+};templates['utility/htmlhint']=function (obj) {
+obj || (obj = {});
+var __t, __p = '', __j = Array.prototype.join;
+function print() { __p += __j.call(arguments, '') }
+with (obj) {
+__p += '<p>' +
+((__t = ( l18n('htmlhint-intro') )) == null ? '' : __t) +
+'</p>\n<ul>';
+ _.each( errors, function(item) { ;
+__p += '\n  <li>' +
+((__t = ( l18n('htmlhint-' + item ) )) == null ? '' : __t) +
+'</li>\n';
+ }); ;
+__p += '</ul>';
+
+}
+return __p
 };templates['layout/sub-row/layout-sub-row']=function (obj) {
 obj || (obj = {});
 var __t, __p = '', __j = Array.prototype.join;
@@ -8050,12 +8124,9 @@ __p += '\n<svg class="cs-custom-icon" version="1.1" xmlns="http://www.w3.org/200
 return __p
 };templates['empty-element']=function (obj) {
 obj || (obj = {});
-var __t, __p = '', __j = Array.prototype.join;
-function print() { __p += __j.call(arguments, '') }
+var __t, __p = '';
 with (obj) {
-
- // elements/empty-element ;
-__p += '\n<div class="cs-empty-element">\n  <div class="cs-empty-element-icon">\n    ' +
+__p += '<div class="cs-empty-element">\n  <div class="cs-empty-element-icon">\n    ' +
 ((__t = ( cs.icon("element-" + _type ) )) == null ? '' : __t) +
 '\n  </div>\n</div>';
 
@@ -9038,6 +9109,15 @@ return __p
   };
 })(jQuery);
 },{}],121:[function(require,module,exports){
+/*!
+ * HTMLHint v0.9.13
+ * https://github.com/yaniswang/HTMLHint
+ *
+ * (c) 2014-2015 Yanis Wang <yanis.wang@gmail.com>.
+ * MIT Licensed
+ */
+var HTMLHint=function(e){function t(e,t){return Array(e+1).join(t||" ")}var a={};return a.version="0.9.13",a.release="20151030",a.rules={},a.defaultRuleset={"tagname-lowercase":!0,"attr-lowercase":!0,"attr-value-double-quotes":!0,"doctype-first":!0,"tag-pair":!0,"spec-char-escape":!0,"id-unique":!0,"src-not-empty":!0,"attr-no-duplication":!0,"title-require":!0},a.addRule=function(e){a.rules[e.id]=e},a.verify=function(t,n){t=t.replace(/^\s*<!--\s*htmlhint\s+([^\r\n]+?)\s*-->/i,function(t,a){return n===e&&(n={}),a.replace(/(?:^|,)\s*([^:,]+)\s*(?:\:\s*([^,\s]+))?/g,function(t,a,i){"false"===i?i=!1:"true"===i&&(i=!0),n[a]=i===e?!0:i}),""}),(n===e||0===Object.keys(n).length)&&(n=a.defaultRuleset);var i,r=new HTMLParser,s=new a.Reporter(t,n),o=a.rules;for(var l in n)i=o[l],i!==e&&n[l]!==!1&&i.init(r,s,n[l]);return r.parse(t),s.messages},a.format=function(e,a){a=a||{};var n=[],i={white:"",grey:"",red:"",reset:""};a.colors&&(i.white="[37m",i.grey="[90m",i.red="[31m",i.reset="[39m");var r=a.indent||0;return e.forEach(function(e){var a=40,s=a+20,o=e.evidence,l=e.line,u=e.col,d=o.length,c=u>a+1?u-a:1,f=o.length>u+s?u+s:d;a+1>u&&(f+=a-u+1),o=o.replace(/\t/g," ").substring(c-1,f),c>1&&(o="..."+o,c-=3),d>f&&(o+="..."),n.push(i.white+t(r)+"L"+l+" |"+i.grey+o+i.reset);var g=u-c,h=o.substring(0,g).match(/[^\u0000-\u00ff]/g);null!==h&&(g+=h.length),n.push(i.white+t(r)+t((l+"").length+3+g)+"^ "+i.red+e.message+" ("+e.rule.id+")"+i.reset)}),n},a}();"object"==typeof exports&&exports&&(exports.HTMLHint=HTMLHint),function(e){var t=function(){var e=this;e._init.apply(e,arguments)};t.prototype={_init:function(e,t){var a=this;a.html=e,a.lines=e.split(/\r?\n/);var n=e.match(/\r?\n/);a.brLen=null!==n?n[0].length:0,a.ruleset=t,a.messages=[]},error:function(e,t,a,n,i){this.report("error",e,t,a,n,i)},warn:function(e,t,a,n,i){this.report("warning",e,t,a,n,i)},info:function(e,t,a,n,i){this.report("info",e,t,a,n,i)},report:function(e,t,a,n,i,r){for(var s,o,l=this,u=l.lines,d=l.brLen,c=a-1,f=u.length;f>c&&(s=u[c],o=s.length,n>o&&f>a);c++)a++,n-=o,1!==n&&(n-=d);l.messages.push({type:e,message:t,raw:r,evidence:s,line:a,col:n,rule:{id:i.id,description:i.description,link:"https://github.com/yaniswang/HTMLHint/wiki/"+i.id}})}},e.Reporter=t}(HTMLHint);var HTMLParser=function(e){var t=function(){var e=this;e._init.apply(e,arguments)};return t.prototype={_init:function(){var e=this;e._listeners={},e._mapCdataTags=e.makeMap("script,style"),e._arrBlocks=[],e.lastEvent=null},makeMap:function(e){for(var t={},a=e.split(","),n=0;a.length>n;n++)t[a[n]]=!0;return t},parse:function(t){function a(t,a,n,i){var r=n-b+1;i===e&&(i={}),i.raw=a,i.pos=n,i.line=w,i.col=r,L.push(i),c.fire(t,i);for(var s;s=m.exec(a);)w++,b=n+m.lastIndex}var n,i,r,s,o,l,u,d,c=this,f=c._mapCdataTags,g=/<(?:\/([^\s>]+)\s*|!--([\s\S]*?)--|!([^>]*?)|([\w\-:]+)((?:\s+[\w\-:]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]*))?)*?)\s*(\/?))>/g,h=/\s*([\w\-:]+)(?:\s*=\s*(?:(")([^"]*)"|(')([^']*)'|([^\s"'>]*)))?/g,m=/\r?\n/g,p=0,v=0,b=0,w=1,L=c._arrBlocks;for(c.fire("start",{pos:0,line:1,col:1});n=g.exec(t);)if(i=n.index,i>p&&(d=t.substring(p,i),o?u.push(d):a("text",d,p)),p=g.lastIndex,!(r=n[1])||(o&&r===o&&(d=u.join(""),a("cdata",d,v,{tagName:o,attrs:l}),o=null,l=null,u=null),o))if(o)u.push(n[0]);else if(r=n[4]){s=[];for(var y,T=n[5],H=0;y=h.exec(T);){var x=y[1],M=y[2]?y[2]:y[4]?y[4]:"",N=y[3]?y[3]:y[5]?y[5]:y[6]?y[6]:"";s.push({name:x,value:N,quote:M,index:y.index,raw:y[0]}),H+=y[0].length}H===T.length?(a("tagstart",n[0],i,{tagName:r,attrs:s,close:n[6]}),f[r]&&(o=r,l=s.concat(),u=[],v=p)):a("text",n[0],i)}else(n[2]||n[3])&&a("comment",n[0],i,{content:n[2]||n[3],"long":n[2]?!0:!1});else a("tagend",n[0],i,{tagName:r});t.length>p&&(d=t.substring(p,t.length),a("text",d,p)),c.fire("end",{pos:p,line:w,col:t.length-b+1})},addListener:function(t,a){for(var n,i=this._listeners,r=t.split(/[,\s]/),s=0,o=r.length;o>s;s++)n=r[s],i[n]===e&&(i[n]=[]),i[n].push(a)},fire:function(t,a){a===e&&(a={}),a.type=t;var n=this,i=[],r=n._listeners[t],s=n._listeners.all;r!==e&&(i=i.concat(r)),s!==e&&(i=i.concat(s));var o=n.lastEvent;null!==o&&(delete o.lastEvent,a.lastEvent=o),n.lastEvent=a;for(var l=0,u=i.length;u>l;l++)i[l].call(n,a)},removeListener:function(t,a){var n=this._listeners[t];if(n!==e)for(var i=0,r=n.length;r>i;i++)if(n[i]===a){n.splice(i,1);break}},fixPos:function(e,t){var a,n=e.raw.substr(0,t),i=n.split(/\r?\n/),r=i.length-1,s=e.line;return r>0?(s+=r,a=i[r].length+1):a=e.col+t,{line:s,col:a}},getMapAttrs:function(e){for(var t,a={},n=0,i=e.length;i>n;n++)t=e[n],a[t.name]=t.value;return a}},t}();"object"==typeof exports&&exports&&(exports.HTMLParser=HTMLParser),HTMLHint.addRule({id:"alt-require",description:"The alt attribute of an <img> element must be present and alt attribute of area[href] and input[type=image] must have a value.",init:function(e,t){var a=this;e.addListener("tagstart",function(n){var i,r=n.tagName.toLowerCase(),s=e.getMapAttrs(n.attrs),o=n.col+r.length+1;"img"!==r||"alt"in s?("area"===r&&"href"in s||"input"===r&&"image"===s.type)&&("alt"in s&&""!==s.alt||(i="area"===r?"area[href]":"input[type=image]",t.warn("The alt attribute of "+i+" must have a value.",n.line,o,a,n.raw))):t.warn("An alt attribute must be present on <img> elements.",n.line,o,a,n.raw)})}}),HTMLHint.addRule({id:"attr-lowercase",description:"All attribute names must be in lowercase.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i=e.attrs,r=e.col+e.tagName.length+1,s=0,o=i.length;o>s;s++){n=i[s];var l=n.name;l!==l.toLowerCase()&&t.error("The attribute name of [ "+l+" ] must be in lowercase.",e.line,r+n.index,a,n.raw)}})}}),HTMLHint.addRule({id:"attr-no-duplication",description:"Elements cannot have duplicate attributes.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i,r=e.attrs,s=e.col+e.tagName.length+1,o={},l=0,u=r.length;u>l;l++)n=r[l],i=n.name,o[i]===!0&&t.error("Duplicate of attribute name [ "+n.name+" ] was found.",e.line,s+n.index,a,n.raw),o[i]=!0})}}),HTMLHint.addRule({id:"attr-unsafe-chars",description:"Attribute values cannot contain unsafe chars.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i,r=e.attrs,s=e.col+e.tagName.length+1,o=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u00ad\u0600-\u0604\u070f\u17b4\u17b5\u200c-\u200f\u2028-\u202f\u2060-\u206f\ufeff\ufff0-\uffff]/,l=0,u=r.length;u>l;l++)if(n=r[l],i=n.value.match(o),null!==i){var d=escape(i[0]).replace(/%u/,"\\u").replace(/%/,"\\x");t.warn("The value of attribute [ "+n.name+" ] cannot contain an unsafe char [ "+d+" ].",e.line,s+n.index,a,n.raw)}})}}),HTMLHint.addRule({id:"attr-value-double-quotes",description:"Attribute values must be in double quotes.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i=e.attrs,r=e.col+e.tagName.length+1,s=0,o=i.length;o>s;s++)n=i[s],(""!==n.value&&'"'!==n.quote||""===n.value&&"'"===n.quote)&&t.error("The value of attribute [ "+n.name+" ] must be in double quotes.",e.line,r+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"attr-value-not-empty",description:"All attributes must have values.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i=e.attrs,r=e.col+e.tagName.length+1,s=0,o=i.length;o>s;s++)n=i[s],""===n.quote&&""===n.value&&t.warn("The attribute [ "+n.name+" ] must have a value.",e.line,r+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"csslint",description:"Scan css with csslint.",init:function(e,t,a){var n=this;e.addListener("cdata",function(e){if("style"===e.tagName.toLowerCase()){var i;if(i="object"==typeof exports&&require?require("csslint").CSSLint.verify:CSSLint.verify,void 0!==a){var r=e.line-1,s=e.col-1;try{var o=i(e.raw,a).messages;o.forEach(function(e){var a=e.line;t["warning"===e.type?"warn":"error"]("["+e.rule.id+"] "+e.message,r+a,(1===a?s:0)+e.col,n,e.evidence)})}catch(l){}}}})}}),HTMLHint.addRule({id:"doctype-first",description:"Doctype must be declared first.",init:function(e,t){var a=this,n=function(i){"start"===i.type||"text"===i.type&&/^\s*$/.test(i.raw)||(("comment"!==i.type&&i.long===!1||/^DOCTYPE\s+/i.test(i.content)===!1)&&t.error("Doctype must be declared first.",i.line,i.col,a,i.raw),e.removeListener("all",n))};e.addListener("all",n)}}),HTMLHint.addRule({id:"doctype-html5",description:'Invalid doctype. Use: "<!DOCTYPE html>"',init:function(e,t){function a(e){e.long===!1&&"doctype html"!==e.content.toLowerCase()&&t.warn('Invalid doctype. Use: "<!DOCTYPE html>"',e.line,e.col,i,e.raw)}function n(){e.removeListener("comment",a),e.removeListener("tagstart",n)}var i=this;e.addListener("all",a),e.addListener("tagstart",n)}}),HTMLHint.addRule({id:"head-script-disabled",description:"The <script> tag cannot be used in a <head> tag.",init:function(e,t){function a(a){var n=e.getMapAttrs(a.attrs),o=n.type,l=a.tagName.toLowerCase();"head"===l&&(s=!0),s!==!0||"script"!==l||o&&r.test(o)!==!0||t.warn("The <script> tag cannot be used in a <head> tag.",a.line,a.col,i,a.raw)}function n(t){"head"===t.tagName.toLowerCase()&&(e.removeListener("tagstart",a),e.removeListener("tagend",n))}var i=this,r=/^(text\/javascript|application\/javascript)$/i,s=!1;e.addListener("tagstart",a),e.addListener("tagend",n)}}),HTMLHint.addRule({id:"href-abs-or-rel",description:"An href attribute must be either absolute or relative.",init:function(e,t,a){var n=this,i="abs"===a?"absolute":"relative";e.addListener("tagstart",function(e){for(var a,r=e.attrs,s=e.col+e.tagName.length+1,o=0,l=r.length;l>o;o++)if(a=r[o],"href"===a.name){("absolute"===i&&/^\w+?:/.test(a.value)===!1||"relative"===i&&/^https?:\/\//.test(a.value)===!0)&&t.warn("The value of the href attribute [ "+a.value+" ] must be "+i+".",e.line,s+a.index,n,a.raw);break}})}}),HTMLHint.addRule({id:"id-class-ad-disabled",description:"The id and class attributes cannot use the ad keyword, it will be blocked by adblock software.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i,r=e.attrs,s=e.col+e.tagName.length+1,o=0,l=r.length;l>o;o++)n=r[o],i=n.name,/^(id|class)$/i.test(i)&&/(^|[-\_])ad([-\_]|$)/i.test(n.value)&&t.warn("The value of attribute "+i+" cannot use the ad keyword.",e.line,s+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"id-class-value",description:"The id and class attribute values must meet the specified rules.",init:function(e,t,a){var n,i=this,r={underline:{regId:/^[a-z\d]+(_[a-z\d]+)*$/,message:"The id and class attribute values must be in lowercase and split by an underscore."},dash:{regId:/^[a-z\d]+(-[a-z\d]+)*$/,message:"The id and class attribute values must be in lowercase and split by a dash."},hump:{regId:/^[a-z][a-zA-Z\d]*([A-Z][a-zA-Z\d]*)*$/,message:"The id and class attribute values must meet the camelCase style."}};if(n="string"==typeof a?r[a]:a,n&&n.regId){var s=n.regId,o=n.message;e.addListener("tagstart",function(e){for(var a,n=e.attrs,r=e.col+e.tagName.length+1,l=0,u=n.length;u>l;l++)if(a=n[l],"id"===a.name.toLowerCase()&&s.test(a.value)===!1&&t.warn(o,e.line,r+a.index,i,a.raw),"class"===a.name.toLowerCase())for(var d,c=a.value.split(/\s+/g),f=0,g=c.length;g>f;f++)d=c[f],d&&s.test(d)===!1&&t.warn(o,e.line,r+a.index,i,d)})}}}),HTMLHint.addRule({id:"id-unique",description:"The value of id attributes must be unique.",init:function(e,t){var a=this,n={};e.addListener("tagstart",function(e){for(var i,r,s=e.attrs,o=e.col+e.tagName.length+1,l=0,u=s.length;u>l;l++)if(i=s[l],"id"===i.name.toLowerCase()){r=i.value,r&&(void 0===n[r]?n[r]=1:n[r]++,n[r]>1&&t.error("The id value [ "+r+" ] must be unique.",e.line,o+i.index,a,i.raw));break}})}}),HTMLHint.addRule({id:"inline-script-disabled",description:"Inline script cannot be use.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i,r=e.attrs,s=e.col+e.tagName.length+1,o=/^on(unload|message|submit|select|scroll|resize|mouseover|mouseout|mousemove|mouseleave|mouseenter|mousedown|load|keyup|keypress|keydown|focus|dblclick|click|change|blur|error)$/i,l=0,u=r.length;u>l;l++)n=r[l],i=n.name.toLowerCase(),o.test(i)===!0?t.warn("Inline script [ "+n.raw+" ] cannot be use.",e.line,s+n.index,a,n.raw):("src"===i||"href"===i)&&/^\s*javascript:/i.test(n.value)&&t.warn("Inline script [ "+n.raw+" ] cannot be use.",e.line,s+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"inline-style-disabled",description:"Inline style cannot be use.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i=e.attrs,r=e.col+e.tagName.length+1,s=0,o=i.length;o>s;s++)n=i[s],"style"===n.name.toLowerCase()&&t.warn("Inline style [ "+n.raw+" ] cannot be use.",e.line,r+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"jshint",description:"Scan script with jshint.",init:function(e,t,a){var n=this;e.addListener("cdata",function(i){if("script"===i.tagName.toLowerCase()){var r=e.getMapAttrs(i.attrs),s=r.type;if(void 0!==r.src||s&&/^(text\/javascript)$/i.test(s)===!1)return;var o;if(o="object"==typeof exports&&require?require("jshint").JSHINT:JSHINT,void 0!==a){var l=i.line-1,u=i.col-1,d=i.raw.replace(/\t/g," ");try{var c=o(d,a);c===!1&&o.errors.forEach(function(e){var a=e.line;t.warn(e.reason,l+a,(1===a?u:0)+e.character,n,e.evidence)})}catch(f){}}}})}}),HTMLHint.addRule({id:"space-tab-mixed-disabled",description:"Do not mix tabs and spaces for indentation.",init:function(e,t,a){var n=this;e.addListener("text",function(i){for(var r,s=i.raw,o=/(^|\r?\n)([ \t]+)/g;r=o.exec(s);){var l=e.fixPos(i,r.index+r[1].length);"space"===a&&/^ +$/.test(r[2])===!1?t.warn("Please use space for indentation.",l.line,1,n,i.raw):"tab"===a&&/^\t+$/.test(r[2])===!1?t.warn("Please use tab for indentation.",l.line,1,n,i.raw):/ +\t|\t+ /.test(r[2])===!0&&t.warn("Do not mix tabs and spaces for indentation.",l.line,1,n,i.raw)}})}}),HTMLHint.addRule({id:"spec-char-escape",description:"Special characters must be escaped.",init:function(e,t){var a=this;e.addListener("text",function(n){for(var i,r=n.raw,s=/[<>]/g;i=s.exec(r);){var o=e.fixPos(n,i.index);t.error("Special characters must be escaped : [ "+i[0]+" ].",o.line,o.col,a,n.raw)}})}}),HTMLHint.addRule({id:"src-not-empty",description:"The src attribute of an img(script,link) must have a value.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){for(var n,i=e.tagName,r=e.attrs,s=e.col+i.length+1,o=0,l=r.length;l>o;o++)n=r[o],(/^(img|script|embed|bgsound|iframe)$/.test(i)===!0&&"src"===n.name||"link"===i&&"href"===n.name||"object"===i&&"data"===n.name)&&""===n.value&&t.error("The attribute [ "+n.name+" ] of the tag [ "+i+" ] must have a value.",e.line,s+n.index,a,n.raw)})}}),HTMLHint.addRule({id:"style-disabled",description:"<style> tags cannot be used.",init:function(e,t){var a=this;e.addListener("tagstart",function(e){"style"===e.tagName.toLowerCase()&&t.warn("The <style> tag cannot be used.",e.line,e.col,a,e.raw)})}}),HTMLHint.addRule({id:"tag-pair",description:"Tag must be paired.",init:function(e,t){var a=this,n=[],i=e.makeMap("area,base,basefont,br,col,embed,frame,hr,img,input,isindex,keygen,link,meta,param,source,track");e.addListener("tagstart",function(e){var t=e.tagName.toLowerCase();void 0!==i[t]||e.close||n.push({tagName:t,line:e.line,raw:e.raw})}),e.addListener("tagend",function(e){for(var i=e.tagName.toLowerCase(),r=n.length-1;r>=0&&n[r].tagName!==i;r--);if(r>=0){for(var s=[],o=n.length-1;o>r;o--)s.push("</"+n[o].tagName+">");if(s.length>0){var l=n[n.length-1];t.error("Tag must be paired, missing: [ "+s.join("")+" ], start tag match failed [ "+l.raw+" ] on line "+l.line+".",e.line,e.col,a,e.raw)}n.length=r}else t.error("Tag must be paired, no start tag: [ "+e.raw+" ]",e.line,e.col,a,e.raw)}),e.addListener("end",function(e){for(var i=[],r=n.length-1;r>=0;r--)i.push("</"+n[r].tagName+">");if(i.length>0){var s=n[n.length-1];t.error("Tag must be paired, missing: [ "+i.join("")+" ], open tag match failed [ "+s.raw+" ] on line "+s.line+".",e.line,e.col,a,"")}})}}),HTMLHint.addRule({id:"tag-self-close",description:"Empty tags must be self closed.",init:function(e,t){var a=this,n=e.makeMap("area,base,basefont,br,col,frame,hr,img,input,isindex,link,meta,param,embed");e.addListener("tagstart",function(e){var i=e.tagName.toLowerCase();void 0!==n[i]&&(e.close||t.warn("The empty tag : [ "+i+" ] must be self closed.",e.line,e.col,a,e.raw))})}}),HTMLHint.addRule({id:"tagname-lowercase",description:"All html element names must be in lowercase.",init:function(e,t){var a=this;e.addListener("tagstart,tagend",function(e){var n=e.tagName;n!==n.toLowerCase()&&t.error("The html element name of [ "+n+" ] must be in lowercase.",e.line,e.col,a,e.raw)})}}),HTMLHint.addRule({id:"title-require",description:"<title> must be present in <head> tag.",init:function(e,t){function a(e){var t=e.tagName.toLowerCase();"head"===t?r=!0:"title"===t&&r&&(s=!0)}function n(r){var o=r.tagName.toLowerCase();if(s&&"title"===o){var l=r.lastEvent;("text"!==l.type||"text"===l.type&&/^\s*$/.test(l.raw)===!0)&&t.error("<title></title> must not be empty.",r.line,r.col,i,r.raw)}else"head"===o&&(s===!1&&t.error("<title> must be present in <head> tag.",r.line,r.col,i,r.raw),e.removeListener("tagstart",a),e.removeListener("tagend",n))}var i=this,r=!1,s=!1;e.addListener("tagstart",a),e.addListener("tagend",n)}});
+},{"csslint":126,"jshint":126}],122:[function(require,module,exports){
 // Generated by CoffeeScript 1.9.2
 
 /*
@@ -9267,7 +9347,7 @@ Copyright 2015 Kevin Sylvestre
   };
 
 }).call(this);
-},{}],122:[function(require,module,exports){
+},{}],123:[function(require,module,exports){
 //https://github.com/customd/jquery-visible
 (function($){
 
@@ -9337,7 +9417,7 @@ Copyright 2015 Kevin Sylvestre
     };
 
 })(jQuery);
-},{}],123:[function(require,module,exports){
+},{}],124:[function(require,module,exports){
 //https://github.com/kmewhort/pointer_events_polyfill
 /*
  * Pointer Events Polyfill: Adds support for the style attribute "pointer-events: none" to browsers without this feature (namely, IE).
@@ -9407,7 +9487,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
         return true;
     });
 };
-},{}],124:[function(require,module,exports){
+},{}],125:[function(require,module,exports){
 // Modified to fix transparent pixels being calculated as black (https://github.com/briangonzalez/rgbaster.js/issues/8)
 ;(function(window, undefined){
 
@@ -9531,7 +9611,9 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
   window.RGBaster = window.RGBaster || RGBaster;
 
 })(window);
-},{}],125:[function(require,module,exports){
+},{}],126:[function(require,module,exports){
+
+},{}],127:[function(require,module,exports){
 //! moment.js
 //! version : 2.10.6
 //! authors : Tim Wood, Iskren Chernev, Moment.js contributors
@@ -12727,7 +12809,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     return _moment;
 
 }));
-},{}],126:[function(require,module,exports){
+},{}],128:[function(require,module,exports){
 /*global define:false */
 /**
  * Copyright 2015 Craig Campbell
@@ -13750,7 +13832,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     }
 }) (window, document);
 
-},{}],127:[function(require,module,exports){
+},{}],129:[function(require,module,exports){
 /**
  * adds a bindGlobal method to Mousetrap that allows you to
  * bind specific keyboard shortcuts that will still work
@@ -13795,7 +13877,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
     Mousetrap.init();
 }) (Mousetrap);
 
-},{}],128:[function(require,module,exports){
+},{}],130:[function(require,module,exports){
 /* NProgress, (c) 2013, 2014 Rico Sta. Cruz - http://ricostacruz.com/nprogress
  * @license MIT */
 
@@ -14273,7 +14355,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
 });
 
 
-},{}],129:[function(require,module,exports){
+},{}],131:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14281,7 +14363,7 @@ PointerEventsPolyfill.prototype.register_mouse_events = function(){
 
 module.exports = require('./src/js/adaptor/jquery');
 
-},{"./src/js/adaptor/jquery":130}],130:[function(require,module,exports){
+},{"./src/js/adaptor/jquery":132}],132:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14329,7 +14411,7 @@ if (typeof define === 'function' && define.amd) {
 
 module.exports = mountJQuery;
 
-},{"../main":136,"../plugin/instances":147}],131:[function(require,module,exports){
+},{"../main":138,"../plugin/instances":149}],133:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14376,7 +14458,7 @@ exports.list = function (element) {
   }
 };
 
-},{}],132:[function(require,module,exports){
+},{}],134:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14465,7 +14547,7 @@ DOM.queryChildren = function (element, selector) {
 
 module.exports = DOM;
 
-},{}],133:[function(require,module,exports){
+},{}],135:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14541,7 +14623,7 @@ EventManager.prototype.once = function (element, eventName, handler) {
 
 module.exports = EventManager;
 
-},{}],134:[function(require,module,exports){
+},{}],136:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14559,7 +14641,7 @@ module.exports = (function () {
   };
 })();
 
-},{}],135:[function(require,module,exports){
+},{}],137:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14645,7 +14727,7 @@ exports.env = {
   supportsIePointer: window.navigator.msMaxTouchPoints !== null
 };
 
-},{"./class":131,"./dom":132}],136:[function(require,module,exports){
+},{"./class":133,"./dom":134}],138:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14661,7 +14743,7 @@ module.exports = {
   destroy: destroy
 };
 
-},{"./plugin/destroy":138,"./plugin/initialize":146,"./plugin/update":150}],137:[function(require,module,exports){
+},{"./plugin/destroy":140,"./plugin/initialize":148,"./plugin/update":152}],139:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14683,7 +14765,7 @@ module.exports = {
   wheelSpeed: 1
 };
 
-},{}],138:[function(require,module,exports){
+},{}],140:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14710,7 +14792,7 @@ module.exports = function (element) {
   instances.remove(element);
 };
 
-},{"../lib/dom":132,"../lib/helper":135,"./instances":147}],139:[function(require,module,exports){
+},{"../lib/dom":134,"../lib/helper":137,"./instances":149}],141:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14775,7 +14857,7 @@ module.exports = function (element) {
   bindClickRailHandler(element, i);
 };
 
-},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],140:[function(require,module,exports){
+},{"../../lib/helper":137,"../instances":149,"../update-geometry":150,"../update-scroll":151}],142:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -14883,7 +14965,7 @@ module.exports = function (element) {
   bindMouseScrollYHandler(element, i);
 };
 
-},{"../../lib/dom":132,"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],141:[function(require,module,exports){
+},{"../../lib/dom":134,"../../lib/helper":137,"../instances":149,"../update-geometry":150,"../update-scroll":151}],143:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15010,7 +15092,7 @@ module.exports = function (element) {
   bindKeyboardHandler(element, i);
 };
 
-},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],142:[function(require,module,exports){
+},{"../../lib/helper":137,"../instances":149,"../update-geometry":150,"../update-scroll":151}],144:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15157,7 +15239,7 @@ module.exports = function (element) {
   bindMouseWheelHandler(element, i);
 };
 
-},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],143:[function(require,module,exports){
+},{"../../lib/helper":137,"../instances":149,"../update-geometry":150,"../update-scroll":151}],145:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15177,7 +15259,7 @@ module.exports = function (element) {
   bindNativeScrollHandler(element, i);
 };
 
-},{"../instances":147,"../update-geometry":148}],144:[function(require,module,exports){
+},{"../instances":149,"../update-geometry":150}],146:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15291,7 +15373,7 @@ module.exports = function (element) {
   bindSelectionHandler(element, i);
 };
 
-},{"../../lib/helper":135,"../instances":147,"../update-geometry":148,"../update-scroll":149}],145:[function(require,module,exports){
+},{"../../lib/helper":137,"../instances":149,"../update-geometry":150,"../update-scroll":151}],147:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15464,7 +15546,7 @@ module.exports = function (element, supportsTouch, supportsIePointer) {
   bindTouchHandler(element, i, supportsTouch, supportsIePointer);
 };
 
-},{"../instances":147,"../update-geometry":148,"../update-scroll":149}],146:[function(require,module,exports){
+},{"../instances":149,"../update-geometry":150,"../update-scroll":151}],148:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15513,7 +15595,7 @@ module.exports = function (element, userSettings) {
   updateGeometry(element);
 };
 
-},{"../lib/class":131,"../lib/helper":135,"./handler/click-rail":139,"./handler/drag-scrollbar":140,"./handler/keyboard":141,"./handler/mouse-wheel":142,"./handler/native-scroll":143,"./handler/selection":144,"./handler/touch":145,"./instances":147,"./update-geometry":148}],147:[function(require,module,exports){
+},{"../lib/class":133,"../lib/helper":137,"./handler/click-rail":141,"./handler/drag-scrollbar":142,"./handler/keyboard":143,"./handler/mouse-wheel":144,"./handler/native-scroll":145,"./handler/selection":146,"./handler/touch":147,"./instances":149,"./update-geometry":150}],149:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15622,7 +15704,7 @@ exports.get = function (element) {
   return instances[getId(element)];
 };
 
-},{"../lib/dom":132,"../lib/event-manager":133,"../lib/guid":134,"../lib/helper":135,"./default-setting":137}],148:[function(require,module,exports){
+},{"../lib/dom":134,"../lib/event-manager":135,"../lib/guid":136,"../lib/helper":137,"./default-setting":139}],150:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15745,7 +15827,7 @@ module.exports = function (element) {
   cls[i.scrollbarYActive ? 'add' : 'remove'](element, 'ps-active-y');
 };
 
-},{"../lib/class":131,"../lib/dom":132,"../lib/helper":135,"./instances":147,"./update-scroll":149}],149:[function(require,module,exports){
+},{"../lib/class":133,"../lib/dom":134,"../lib/helper":137,"./instances":149,"./update-scroll":151}],151:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15852,7 +15934,7 @@ module.exports = function (element, axis, value) {
 
 };
 
-},{"./instances":147}],150:[function(require,module,exports){
+},{"./instances":149}],152:[function(require,module,exports){
 /* Copyright (c) 2015 Hyunje Alex Jun and other contributors
  * Licensed under the MIT License
  */
@@ -15889,7 +15971,7 @@ module.exports = function (element) {
   d.css(i.scrollbarYRail, 'display', '');
 };
 
-},{"../lib/dom":132,"../lib/helper":135,"./instances":147,"./update-geometry":148}]},{},[4])(4)
+},{"../lib/dom":134,"../lib/helper":137,"./instances":149,"./update-geometry":150}]},{},[4])(4)
 });
 //# sourceMappingURL=builder.map
 

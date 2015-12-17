@@ -267,8 +267,11 @@ function cs_alias_shortcode( $new_tag, $existing_tag, $filter_atts = true ) {
 		return;
 
 	global $wp_filter;
+
 	foreach ( $wp_filter[$tag] as $priority => $filter ) {
-		add_filter( "shortcode_atts_$new_tag", $filter['function'], $priority, $filter['accepted_args'] );
+		foreach ($filter as $tag => $value) {
+			add_filter( "shortcode_atts_$new_tag", $value['function'], $priority, $value['accepted_args'] );
+		}
 	}
 
 }

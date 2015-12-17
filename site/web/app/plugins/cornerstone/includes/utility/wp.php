@@ -1,7 +1,7 @@
 <?php
 /**
- * Cornerstone makes use of wp_json_encode which is not available until WordPress 4.1
- * This file provides that function to outdated WordPress installations.
+ * Cornerstone makes use of functions from more recent versions of WordPress.
+ * This file provides them to outdated WordPress installations.
  * It is highly advisable that if you have any installs running outdated versions of
  * WordPress that you update as soon as possible. This is one of the best defenses in
  * keeping your site secure. You can read about WordPress release history here:
@@ -138,4 +138,23 @@ if ( !function_exists('wp_json_encode') && !function_exists('_wp_json_sanity_che
 		}
 	}
 
+endif;
+
+if ( !function_exists('wp_scripts') ) :
+	/**
+	 * Initialize $wp_scripts if it has not been set.
+	 *
+	 * @global WP_Scripts $wp_scripts
+	 *
+	 * @since 4.2.0
+	 *
+	 * @return WP_Scripts WP_Scripts instance.
+	 */
+	function wp_scripts() {
+		global $wp_scripts;
+		if ( ! ( $wp_scripts instanceof WP_Scripts ) ) {
+			$wp_scripts = new WP_Scripts();
+		}
+		return $wp_scripts;
+	}
 endif;

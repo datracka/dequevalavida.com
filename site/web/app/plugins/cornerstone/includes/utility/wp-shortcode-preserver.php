@@ -5,7 +5,7 @@
  * like wptexturize and wpautop from affecting your content.
  */
 
-class WP_Shortcode_Preserver {
+class CS_Shortcode_Preserver {
 
 	/**
 	 * I am a singleton
@@ -40,7 +40,7 @@ class WP_Shortcode_Preserver {
 	 */
 	public function preserve_shortcodes( $content ) {
 
-		$this->shortcodes = apply_filters( 'wp_preserve_shortcodes', $this->shortcodes );
+		$this->shortcodes = apply_filters( 'cs_preserve_shortcodes', $this->shortcodes );
 
 		if ( empty( $this->shortcodes ) )
 			return $content;
@@ -67,10 +67,18 @@ class WP_Shortcode_Preserver {
 	 * @return string          Final content
 	 */
 	public function restore_shortcodes( $content ) {
+
 		foreach ($this->cache as $key => $value) {
+
+			if ( apply_filters( 'cs_preserve_shortcodes_no_wrap', false ) ) {
+				$content = str_replace( '<p>' . $key . '</p>', $key, $content );
+			}
+
 			$content = do_shortcode( str_replace( $key, $value, $content ), true );
 		}
+
 		return $content;
+
 	}
 
 	/**
@@ -86,18 +94,18 @@ class WP_Shortcode_Preserver {
 
 	/**
 	 * Instance accessor. If instance doesn't exist, we'll initialize the class.
-	 * @return object WP_Shortcode_Preserver::$instance
+	 * @return object CS_Shortcode_Preserver::$instance
 	 */
 	public static function instance() {
 		if (!isset(self::$instance))
-			self::$instance = new WP_Shortcode_Preserver;
+			self::$instance = new CS_Shortcode_Preserver;
 		return self::$instance;
 	}
 
 	/**
 	 * Alias for ::instance
 	 * For semantics. init can be called when the intention is the first initialization
-	 * @return object WP_Shortcode_Preserver::$instance
+	 * @return object CS_Shortcode_Preserver::$instance
 	 */
 	public static function init() {
 		return self::instance();

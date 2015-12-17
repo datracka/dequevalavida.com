@@ -81,8 +81,8 @@ class Cornerstone_Integration_X_Theme {
 		//
 
 		// Mk2
-		cs_alias_shortcode( array( 'alert', 'x_alert' ), 'cs_alert', false );
-		cs_alias_shortcode( array( 'x_text' ), 'cs_text', false );
+		cs_alias_shortcode( array( 'alert', 'x_alert' ), 'cs_alert' );
+		cs_alias_shortcode( array( 'x_text' ), 'cs_text' );
 
 		// Mk1
 		cs_alias_shortcode( 'accordion',            'x_accordion', false );

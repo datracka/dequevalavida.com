@@ -33,14 +33,11 @@ class Cornerstone_Data_Controller  extends Cornerstone_Plugin_Component {
 
 		$data = get_post_meta( $this->post->ID, '_cornerstone_data', true );
 
-		$this->orchestrator->load_elements();
-
 		if ( !is_array( $data ) )
 			return $data;
 
 		return $this->migrate( $data );
 
-		return $data;
 	}
 
 	public function migrate( $elements, $version = 0 ) {
@@ -48,6 +45,8 @@ class Cornerstone_Data_Controller  extends Cornerstone_Plugin_Component {
 		// Skip migrations if we are working with up to date elements.
 		if ( version_compare( $this->plugin->version(), $version,'<' ) )
 			return $elements;
+
+		$this->orchestrator->load_elements();
 
 		foreach ($elements as $key => $element) {
 			$elements[$key] = $this->migrate_element( $element, $version );
@@ -106,6 +105,11 @@ class Cornerstone_Data_Controller  extends Cornerstone_Plugin_Component {
 			if ( 'column' == $element['_type'] && isset( $element['active'] ) ) {
 				$element['_active'] = $element['active'];
 				unset($element['active']);
+			}
+
+			if ( isset( $element['custom_id'] ) ) {
+				$element['id'] = $element['custom_id'];
+				unset($element['custom_id']);
 			}
 
 		}

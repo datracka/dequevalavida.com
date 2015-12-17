@@ -189,9 +189,12 @@ return array(
 	'moment-weekdays-min'   => __( 'Su_Mo_Tu_We_Th_Fr_Sa', $td ),
 
 	// Errors
-	'browser-no-can' => __( "We're sorry! Your web browser does not support this action.", $td ),
-	'no-preview' => __( "%s (Preview Unsupported)", $td ),
-	'preview-failure' => __( "An unidentifiable error is preventing the live preview from loading.", $td ),
-	'preview-late'    => __( "Loading the preview took longer than expected. There may be script conflicts on this page.", $td )
+	'browser-no-can'            => __( "We're sorry! Your web browser does not support this action.", $td ),
+	'no-preview'                => __( "%s (Preview Unsupported)", $td ),
+	'preview-failure'           => __( "An unidentifiable error is preventing the live preview from loading.", $td ),
+	'preview-late'              => __( "Loading the preview took longer than expected. There may be script conflicts on this page.", $td ),
+	'htmlhint-intro'            => __( "We found some invalid HTML in your content.", $td ),
+	'htmlhint-tag-pair'         => __( "You have unclosed HTML tags.", $td ),
+	'htmlhint-spec-char-escape' => __( "If not part of an HTML tag, consider using HTML entities for angle brackets by converting <span class=\"monospace\">&lt;</span> to <span class=\"monospace\">&amp;lt;</span> and <span class=\"monospace\">&gt;</span> to <span class=\"monospace\">&amp;gt;</span>", $td )
 
 );

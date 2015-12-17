@@ -19,6 +19,7 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 		add_action( 'cornerstone_endpoint_cs_render_element', array( $this, 'render' ) );
 		add_action( 'cornerstone_endpoint_cs_setting_sections', array( $this, 'settings' ) );
 		add_action( 'cornerstone_endpoint_cs_templates', array( $this, 'templates' ) );
+		add_action( 'cornerstone_endpoint_cs_template_migration', array( $this, 'template_migration' ) );
 		add_action( 'cornerstone_endpoint_cs_save_template', array( $this, 'template_save' ) );
 		add_action( 'cornerstone_endpoint_cs_delete_template', array( $this, 'template_delete' ) );
 
@@ -27,6 +28,7 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 		add_action( 'wp_ajax_cs_render_element', array( $this, 'render' ) );
 		add_action( 'wp_ajax_cs_setting_sections', array( $this, 'settings' ) );
 		add_action( 'wp_ajax_cs_templates', array( $this, 'templates' ) );
+		add_action( 'wp_ajax_cs_template_migration', array( $this, 'template_migration' ) );
 		add_action( 'wp_ajax_cs_save_template', array( $this, 'template_save' ) );
 		add_action( 'wp_ajax_cs_delete_template', array( $this, 'template_delete' ) );
 
@@ -75,6 +77,10 @@ class Cornerstone_Router extends Cornerstone_Plugin_Component {
 
 	public function templates() {
 		$this->plugin->loadComponent( 'Layout_Manager' )->ajax_templates( $this->getJSON() );
+	}
+
+	public function template_migration() {
+		$this->plugin->loadComponent( 'Layout_Manager' )->ajax_template_migration( $this->getJSON() );
 	}
 
 	public function override() {

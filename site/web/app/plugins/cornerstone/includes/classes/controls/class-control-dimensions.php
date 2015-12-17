@@ -19,11 +19,7 @@ class Cornerstone_Control_Dimensions extends Cornerstone_Control {
 
 	public static function simplify( $item ) {
 
-		// Single by linking
-		if ( $item[4] == 'linked' )
-			return $item[0];
-
-		array_pop($item);
+		array_pop( $item ); // remove 'linked'
 
 		// Single value (unlinked, but still equal)
 		if ( count( array_unique( $item ) ) === 1 )

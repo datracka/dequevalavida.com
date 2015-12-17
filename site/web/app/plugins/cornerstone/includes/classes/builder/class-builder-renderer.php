@@ -3,9 +3,12 @@ class Cornerstone_Builder_Renderer extends Cornerstone_Plugin_Component {
 
 	public $raw_markup = false;
 
+	public $dependencies = array( 'Front_End' );
+
 	public function ajax_handler( $data ) {
 
-		WP_Shortcode_Preserver::init();
+		CS_Shortcode_Preserver::init();
+		add_filter('cs_preserve_shortcodes_no_wrap', '__return_true' );
 
 		$this->orchestrator = $this->plugin->component( 'Element_Orchestrator' );
 		$this->orchestrator->load_elements();
@@ -63,7 +66,7 @@ class Cornerstone_Builder_Renderer extends Cornerstone_Plugin_Component {
 
 			$scripts = $this->enqueue_extractor->extract();
 
-			$results[$job['jobID']] = array( 'markup' => $markup );
+			$results[$job['jobID']] = array( 'markup' => $markup, 'ts' => $job['ts'] );
 
 			if ( !empty($scripts) )
 				$results[$job['jobID']]['scripts'] = $scripts;

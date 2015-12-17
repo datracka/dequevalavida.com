@@ -180,7 +180,7 @@ class Cornerstone_Control {
 		if ( is_string( $item ) )
 			return wp_kses( $item, $this->ksesTags() );
 
-		return self::default_sanitize( $data );
+		return $data; //self::default_sanitize( $data );
 
 	}
 

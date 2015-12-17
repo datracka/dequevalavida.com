@@ -10,7 +10,7 @@ $class = trim( "x-alert x-alert-$type " . $close_class . ' ' . $class );
 ?>
 
 <div <?php cs_atts( array( 'id' => $id, 'class' => $class, 'style' => $style ) ); ?>>
-<?php if ( $close ) : ?>
+<?php if ( $close === true ) : ?>
 	<button type="button" class="close" data-dismiss="alert">&times;</button>
 <?php endif; ?>
 <?php if ( $heading ) : ?>

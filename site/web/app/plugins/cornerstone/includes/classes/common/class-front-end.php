@@ -12,9 +12,6 @@ class Cornerstone_Front_End extends Cornerstone_Plugin_Component {
 	 */
 	public function setup() {
 
-		// Load Shortcodes
-		$this->load();
-
 		// Enqueue Scripts & Styles
 
 		add_action( 'wp_enqueue_scripts', array( $this, 'scripts' ) );
@@ -27,7 +24,6 @@ class Cornerstone_Front_End extends Cornerstone_Plugin_Component {
 		// Add Body Class
 		add_filter( 'body_class', array( $this, 'addBodyClass' ), 10002 );
 
-		do_action( 'cornerstone_shortcodes_loaded' );
 	}
 
 	/**
@@ -57,26 +53,6 @@ class Cornerstone_Front_End extends Cornerstone_Plugin_Component {
 
   	wp_enqueue_script( 'cornerstone-site-head' );
   	wp_enqueue_script( 'cornerstone-site-body' );
-
-	}
-
-	/**
-	 * Autoload shortcode definitions
-	 */
-	public function load() {
-
-		// Load Shortcodes
-		$path = $this->path( 'includes/shortcodes/' );
-		foreach ( glob("$path*.php") as $filename ) {
-
-			if ( !file_exists( $filename) ) continue;
-
-			$words = explode('-', str_replace('.php', '', basename($filename) ) );
-			if ( strpos($words[0], '_') === 0 ) continue;
-
-			require_once( $filename );
-
-		}
 
 	}
 
