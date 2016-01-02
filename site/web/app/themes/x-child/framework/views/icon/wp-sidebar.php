@@ -16,10 +16,10 @@
                 <?php
                 /*select sidebar on category */
                 $categories = get_the_category();
-                if ($categories[0]->name == "Blog") {
-                    get_sidebar('libros');
-                } else {
+                if ($categories[0]->name == "Libros") {
                     get_sidebar('blog');
+                } else  {
+                    get_sidebar('Libros');
                 }
                 ?>
             <?php else : ?>

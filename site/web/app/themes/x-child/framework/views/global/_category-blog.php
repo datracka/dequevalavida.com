@@ -22,11 +22,11 @@ endif;
 
 /** filtering by category name blog */
 
-        $category_query_args = array(
-            'category_name' => "libros"
-        );
+$category_query_args = array(
+    'category_name' => "blog"
+);
 
-  $category_query = new WP_Query( $category_query_args );
+$category_query = new WP_Query( $category_query_args );
 
 ?>
 
